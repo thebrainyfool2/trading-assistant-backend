@@ -314,7 +314,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /actuator/health
-    autoDeployTrigger: off   # enable after connecting the Render GitHub App
+    autoDeployTrigger: commit
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
@@ -348,7 +348,7 @@ render blueprints validate ./render.yaml --output json
 
 The service was created through the Render CLI against the new Render account (`thebrainyfools3@gmail.com`) using the public backend repository URL. The account is separate from the older Render CLI account that contains `maze-reminder-bot-ohio`; that unrelated service was not modified.
 
-Because the backend was added through Render's public Git repository flow, Render's documented behavior is that automatic Git webhook deploys are unavailable unless the Render GitHub App is connected later. The Blueprint therefore sets `autoDeployTrigger: off`; deployment is manual until the GitHub App is connected. Trigger a manual deploy with `render deploys create <serviceId>`.
+Automatic deploy is active for this service. A push to `main` during verification triggered a new Render deploy, which reached `live`. Manual deploys can also be triggered with `render deploys create <serviceId>` if a rebuild is needed without a commit.
 
 ### 6.3 Deployment status
 
@@ -360,8 +360,8 @@ Because the backend was added through Render's public Git repository flow, Rende
 - **Dashboard:** <https://dashboard.render.com/web/srv-dbut8f9srm7s73ftpni0>
 - **Region:** Oregon
 - **Plan:** Free (Phase 1 only)
-- **Deployed commit:** `7394e38dbe03cfacb9520939d7766d80f602b1ec`
-- **Deploy status:** `live` after the corrected health-check redeploy
+- **Runtime commit:** `7394e38dbe03cfacb9520939d7766d80f602b1ec` (the initial backend commit)
+- **Deploy status:** `live`; automatic deploys from `main` are active, and subsequent documentation deploys also reached `live`
 - **Repository visibility:** public backend repository; private frontend repository
 
 The remote Docker build executed the complete Maven test suite successfully (9 tests, 0 failures) before producing the runtime image. The first deploy was created with a Windows-converted health-check path caused by Git Bash path translation; the service configuration was corrected to `/actuator/health` and a clean redeploy was made. The corrected deploy reached `live`.
@@ -380,7 +380,7 @@ Verified on the public origin:
 ### 6.4 Reproducible deployment procedure
 
 1. Push the backend repository to GitHub on `main`.
-2. Either connect the Render GitHub App for automatic deploys or use the public repository URL as done here.
+2. Use the public repository URL as done here. Automatic deploys from `main` are active; if the repository is made private, connect the Render GitHub App and grant it repository access first.
 3. Create the web service with the backend repository, branch `main`, Docker runtime, region `oregon`, plan `free`, and health check `/actuator/health`.
 4. Set `SPRING_PROFILES_ACTIVE=prod`, `APP_NAME=Trading Assistant API`, and `APP_API_VERSION=v1`.
 5. Deploy and wait until Render reports `live`.
@@ -529,7 +529,8 @@ The public deployment was checked after Render reported `live`:
 - **Local Docker image build:** not run because Docker is not installed on this machine. The remote Render Docker build did succeed and executed the tests.
 - **Android client:** intentionally not implemented or tested.
 - **Load, performance, and security penetration testing:** out of Phase 1 scope.
-- **Automatic Git deploys:** not available through the public Git repository flow unless the Render GitHub App is connected. Manual deploy works.
+- **Automatic Git deploys:** verified. A documentation push to `main` triggered a new deployment that reached `live`.
+- **Local Docker image build:** not run because Docker is not installed on this machine; the remote Render build succeeded and executed the tests.
 
 ---
 
@@ -602,7 +603,7 @@ The public deployment was checked after Render reported `live`:
 1. **Approve Phase 1** after reviewing the architecture, error contract, deployment evidence, and test results.
 2. **Rotate the Render API key** that was shared in chat and store future keys only in a secret manager or CI secret store.
 3. **Decide the final backend repository visibility.** It is currently public so the new Render account can build it without a GitHub App. If private source is preferred, connect the Render GitHub App and grant access before changing visibility.
-4. **Connect GitHub to Render if automatic deploys are required.** The current public-repository flow supports manual deploys, not Git webhook auto-deploys.
+4. **Use branch protection because automatic deploys are active.** Every push to `main` can deploy to the free public environment; protect the branch before adding collaborators or CI.
 5. **Upgrade to an always-on Render plan before live monitoring.** The free plan's spin-down behavior conflicts with continuous market monitoring and WebSockets.
 6. **Keep SmartAPI credentials out of the repository.** Phase 2 should use Render environment variables or a managed secret store, with separate values for local and deployed environments.
 7. **Confirm Angel One requirements at Phase 2 kickoff.** Current documentation ties static-IP allowlisting to order/GTT APIs, not market data or login. Since this platform never places orders, dedicated Render IPs are not currently justified; revisit only if requirements change.

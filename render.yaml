@@ -7,8 +7,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /actuator/health
-    # Public Git repository flow: connect the Render GitHub App to enable commit deploys.
-    autoDeployTrigger: off
+    autoDeployTrigger: commit
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod

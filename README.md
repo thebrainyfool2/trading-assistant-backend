@@ -141,7 +141,7 @@ services:
 - Region: Oregon
 - Repository visibility: public, so Render can build without a GitHub App connection in the new Render account
 
-The service definition uses the free compute plan, which is appropriate for Phase 1 validation but not for continuous monitoring. Because it was added through Render's public Git repository flow, automatic Git webhook deploys are unavailable unless the Render GitHub App is connected later; trigger manual deploys with `render deploys create srv-dbut8f9srm7s73ftpni0`. See the report for the networking implications.
+The service definition uses the free compute plan, which is appropriate for Phase 1 validation but not for continuous monitoring. Automatic deploys from `main` are active; a documentation push during verification triggered a successful deployment. Manual deploys can also be triggered with `render deploys create srv-dbut8f9srm7s73ftpni0`. See the report for the networking implications.
 
 ## Security notes
 
