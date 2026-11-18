@@ -4,7 +4,7 @@ Spring Boot 4.1.2 backend foundation for the Trading Assistant platform. Java 21
 
 This backend is maintained as an independent Git repository. The future Android client lives in a separate repository under the workspace `frontend/` directory.
 
-Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. There is still no database, user authentication, trading logic, order placement, strategy engine, or Android client.
+Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. There is still no database, user authentication, trading logic, order placement, strategy engine, option analytics, or Android client.
 
 ## Prerequisites
 
@@ -112,6 +112,15 @@ com.tradingassistant
 │   ├── session     Indicator session registry, lifecycle policies and snapshots
 │   ├── exception   Safe pipeline, session and delivery failures
 │   └── (root)      Processing pipeline, subscriptions, lifecycle manager and wiring
+├── intelligence
+│   ├── api         MarketAnalyzer extension contract
+│   ├── analysis    Trend, momentum, volatility, participation, structure and session analyzers
+│   ├── config      Immutable, validated intelligence configuration and warm-up policy
+│   ├── domain      Analysis context, immutable assessment model and statuses
+│   ├── engine      Composition, overall status and confidence
+│   ├── session     Bounded per-instrument analysis history
+│   ├── service     Indicator-update to assessment event adapter
+│   └── exception   Intelligence validation failures
 └── system
     ├── api       System controller and HTTP DTO
     ├── application System information use case
@@ -249,6 +258,21 @@ Phase 5 turns the Phase 2-4 libraries into a running pipeline. It contains infra
 
 The full architecture, aggregation and session policies, event model, validation and concurrency strategy, and testing report is in [`docs/phase-5-report.md`](docs/phase-5-report.md).
 
+## Market intelligence engine (Phase 6)
+
+Phase 6 describes the market. It consumes completed candles, indicator results and calendar session context and produces one immutable `MarketAssessment` per candle; it never produces a signal, a recommendation, a score, a position size or a risk measure.
+
+- `intelligence.domain`: `MarketAssessment` with separate `TrendAssessment`, `MomentumAssessment`, `VolatilityAssessment`, `ParticipationAssessment`, `StructureAssessment` and `SessionAssessment`, plus `AssessmentStatus` and `Confidence`. All records are immutable and carry named fields only.
+- `intelligence.analysis`: six independent analyzers (trend, momentum, volatility, participation, market structure and session context) implementing one `MarketAnalyzer` contract. No analyzer calls another.
+- `intelligence.engine`: `MarketIntelligenceEngine` composes the analyzers, validates required indicators, and derives overall status and confidence.
+- `intelligence.config`: immutable `MarketIntelligenceConfig` with validated thresholds, session windows, confidence thresholds, required indicator types and a `PERMISSIVE`/`STRICT` warm-up policy.
+- `intelligence.service`: consumes `IndicatorUpdatedEvent`, keeps a bounded per-instrument history, and publishes `MarketAssessmentGeneratedEvent`.
+- Warm-up is never silent: each aspect reports `READY`, `PARTIAL`, `INSUFFICIENT_DATA` or `UNKNOWN`, and an indicator that is missing, warming up or lacking a named value is excluded rather than assumed.
+- Input mismatches are rejected deterministically: null input, empty indicator sets, duplicate indicator types, mixed instruments or intervals, non-ascending candles and indicators not aligned to the latest candle.
+- No options, Greeks, implied volatility, PCR, risk, strategy, trade qualification, position sizing, order, persistence, database, scheduler, AI or notification logic is included.
+
+The full architecture, assessment model, analyzer rules, configuration, warm-up and validation policy, event integration and testing report is in [`docs/phase-6-report.md`](docs/phase-6-report.md).
+
 ## Security notes
 
 - No API keys, secrets, credentials, or tokens are present in the repository.
@@ -280,6 +304,7 @@ The full architecture, aggregation and session policies, event model, validation
 - Phase 3 domain validation, all market mappers, market-time policy, service orchestration, feed bridging and conditional wiring
 - Phase 4 reference values, all sixteen indicators, warm-up, incremental parity, reset behavior, configuration, validation, gap detection, immutability and a 5,000-candle performance bound
 - Phase 5 aggregation across every interval, interval rollover, duplicate/late/future/out-of-session ticks, empty intervals, calendar sessions, holidays and special sessions, session creation and expiry, event order and delivery, registry lookup and concurrency, lifecycle shutdown and a multi-instrument replay dataset
+- Phase 6 trend, momentum, volatility, participation, structure and session scenarios, warm-up and strict-policy handling, missing and misaligned indicators, configuration validation, immutable outputs, event publication, replay parity and a 2,000-event multi-instrument replay
 
 The opt-in live tests are skipped unless `SMARTAPI_LIVE_TESTS=true` and real credentials are present:
 
@@ -294,4 +319,4 @@ mvn -Dtest=AngelOneLiveIntegrationTest test
 
 The Phase 2 test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. The Phase 3 test maps the real instrument master and option contracts into the domain. Both were run successfully against a real account and never print credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
 
-Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md).
+Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md).
