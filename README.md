@@ -4,7 +4,7 @@ Spring Boot 4.1.2 backend foundation for the Trading Assistant platform. Java 21
 
 This backend is maintained as an independent Git repository. The future Android client lives in a separate repository under the workspace `frontend/` directory.
 
-Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. Phase 7 adds the option chain and options analytics engine, which describes the derivatives market — chain structure, Greeks, implied volatility, open interest, put/call ratios, max pain, expected move and liquidity — without producing signals. Phase 8 adds the strategy evaluation engine, which answers whether predefined strategy rules currently evaluate to true, without recommending, ranking or qualifying trades. Phase 9 adds the trade qualification engine, which decides whether a strategy evaluation is currently eligible for downstream consideration, without recommending, ranking, sizing or trading. There is still no database, user authentication, trading logic, order placement, risk engine, or Android client.
+Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. Phase 7 adds the option chain and options analytics engine, which describes the derivatives market — chain structure, Greeks, implied volatility, open interest, put/call ratios, max pain, expected move and liquidity — without producing signals. Phase 8 adds the strategy evaluation engine, which answers whether predefined strategy rules currently evaluate to true, without recommending, ranking or qualifying trades. Phase 9 adds the trade qualification engine, which decides whether a strategy evaluation is currently eligible for downstream consideration, without recommending, ranking, sizing or trading. Phase 10 adds the risk management and position sizing engine, which describes allowable risk boundaries — stop distance, risk budget, size, leverage and policy limits — without approving, recommending or placing anything. There is still no database, user authentication, trading logic, portfolio management, order placement or Android client.
 
 ## Prerequisites
 
@@ -153,6 +153,17 @@ com.tradingassistant
 │   ├── service     Assessment staging and strategy-to-qualification adapter
 │   ├── validation  Context, rule batch and limit validation
 │   └── exception   Qualification validation and evaluation failures
+├── risk
+│   ├── api         RiskRule contract
+│   ├── config      Immutable, validated risk policy
+│   ├── domain      Assessments, context, plan, stop, sizing and validations
+│   ├── engine      Composition, status aggregation and optional parallel evaluation
+│   ├── math        Pure stop and position-size derivation
+│   ├── registry    Thread-safe rule registry and built-in risk rules
+│   ├── rule        Qualification, stop, risk, leverage, exposure and reward rules
+│   ├── service     Aligned staging and qualification-to-assessment adapter
+│   ├── validation  Context and rule batch validation
+│   └── exception   Risk validation and evaluation failures
 └── system
     ├── api       System controller and HTTP DTO
     ├── application System information use case
@@ -349,6 +360,21 @@ Phase 9 answers one question per strategy evaluation: is it currently eligible f
 
 The full architecture, qualification model, rule semantics, registry, engine, event integration, validation and testing report is in [`docs/phase-9-report.md`](docs/phase-9-report.md).
 
+## Risk management and position sizing (Phase 10)
+
+Phase 10 describes the risk boundaries of a qualified trade: how far a volatility-derived stop sits, what quantity a configured risk budget would fund and whether every policy limit holds. It approves nothing, recommends nothing, allocates no capital across strategies and places no order.
+
+- `risk.domain`: `RiskAssessment` (status, risk budget, maximum permitted loss, stop, ATR multiple, volatility adjustment, sizing, leverage ceiling, reward-to-risk, daily-loss and exposure validations, rule outcomes, diagnostics), `RiskContext` (aligned strategy, qualification, market, optional option assessment and candle, indicators), `RiskPlan` (derived numbers), `StopCalculation`, `PositionSizing` and the three validation records. No approval, order, fill, account balance or profit projection exists.
+- `risk.math`: `RiskCalculator` derives one plan per assessment — ATR × a volatility-adjusted multiple gives the stop, the risk budget divided by the stop gives the quantity, quantity × price gives the notional and leverage. Missing ATR or price yields a plan without a stop or size rather than a guessed value.
+- `risk.rule`: fifteen immutable rules covering qualification eligibility, ATR stop derivation, minimum and maximum stop distance, volatility adjustment, risk percent, daily and session loss limits, open exposure, leverage, quantity, reward-to-risk, gap protection, option premium risk and instrument overrides.
+- `risk.engine`: `RiskEngine` is stateless. Aggregation is deterministic (`WITHIN_LIMITS`, `LIMIT_BREACHED`, `PARTIAL`, `INSUFFICIENT_DATA`, `UNKNOWN`), `strictValidation` short-circuits when no stop can be derived, `failFast` controls rule-failure propagation and parallel evaluation uses only an injected executor with preserved registry order.
+- `risk.registry`: thread-safe `RiskRuleRegistry` with atomic register, replace, unregister, lookup, duplicate detection and sorted immutable snapshots; `BuiltInRiskRules` is the ordered catalog.
+- `risk.service`: consumes `TradeQualifiedEvent` plus the assessment and strategy events, stages qualifications whose inputs have not arrived yet in a bounded map, uses only aligned option and indicator data and publishes `RiskAssessmentGeneratedEvent`.
+- `risk.config`: immutable `RiskEngineConfig` with a reference capital (a policy constant, never account state), risk and loss percentages, ATR multiple, stop range, leverage, quantity, fractional, override, fail-fast and parallel toggles.
+- No order placement, broker execution, portfolio management, capital allocation, account synchronization, P&L tracking, trade lifecycle, trailing stop, notification, scheduler, persistence, backtesting or AI/ML logic is included.
+
+The full architecture, domain model, rule semantics, engine design, configuration, validation and testing report is in [`docs/phase-10-report.md`](docs/phase-10-report.md).
+
 ## Security notes
 
 - No API keys, secrets, credentials, or tokens are present in the repository.
@@ -384,6 +410,7 @@ The full architecture, qualification model, rule semantics, registry, engine, ev
 - Phase 7 chain construction, expiry and moneyness classification, Greek reference values and limits, implied-volatility recovery and history statistics, smile, skew and surface, open-interest change and build-up, PCR aggregation, max pain, expected move, liquidity, validation, event publication, replay idempotence, multi-underlying isolation, a 410-leg five-expiry chain and configuration validation
 - Phase 8 strategy registration and replacement, duplicate detection, all fifteen built-in strategies, rule evaluation, partial and insufficient outcomes, strict input handling, fail-fast containment, parallel determinism, immutable models and snapshots, event publication, cache alignment, instrument isolation and configuration validation
 - Phase 9 qualification success, failure, partial and insufficient outcomes, unknown states, duplicate suppression, every built-in rule, confidence and participation floors, session and option-liquidity rules, option freshness and session alignment, timestamp and instrument mismatches, registry operations, parallel determinism, immutability, event publication, staging order, configuration and wiring
+- Phase 10 stop and size derivation, volatility adjustment, fractional and whole-unit quantities, instrument overrides, every built-in risk rule, within-limit, breach, partial and insufficient outcomes, fail-fast containment, parallel determinism, immutable models, registry operations, configuration validation, staging order, aligned option and indicator filtering, event publication and Spring wiring
 
 The opt-in live tests are skipped unless `SMARTAPI_LIVE_TESTS=true` and real credentials are present:
 
@@ -398,4 +425,4 @@ mvn -Dtest=AngelOneLiveIntegrationTest test
 
 The Phase 2 test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. The Phase 3 test maps the real instrument master and option contracts into the domain. Both were run successfully against a real account and never print credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
 
-Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md); Phase 7 results are in [`docs/phase-7-report.md`](docs/phase-7-report.md); Phase 8 results are in [`docs/phase-8-report.md`](docs/phase-8-report.md); Phase 9 results are in [`docs/phase-9-report.md`](docs/phase-9-report.md).
+Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md); Phase 7 results are in [`docs/phase-7-report.md`](docs/phase-7-report.md); Phase 8 results are in [`docs/phase-8-report.md`](docs/phase-8-report.md); Phase 9 results are in [`docs/phase-9-report.md`](docs/phase-9-report.md); Phase 10 results are in [`docs/phase-10-report.md`](docs/phase-10-report.md).
