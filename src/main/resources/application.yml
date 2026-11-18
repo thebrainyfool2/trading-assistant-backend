@@ -37,6 +37,27 @@ app:
   name: ${APP_NAME:Trading Assistant API}
   description: ${APP_DESCRIPTION:Market analysis and trade monitoring platform}
   api-version: ${APP_API_VERSION:v1}
+  broker:
+    angel-one:
+      # Disabled by default so operational endpoints remain available without broker credentials.
+      enabled: ${SMARTAPI_ENABLED:false}
+      base-url: ${SMARTAPI_BASE_URL:https://apiconnect.angelone.in}
+      websocket-url: ${SMARTAPI_WEBSOCKET_URL:wss://smartapisocket.angelone.in/smart-stream}
+      instrument-master-url: ${SMARTAPI_INSTRUMENT_MASTER_URL:https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json}
+      api-key: ${SMARTAPI_API_KEY:}
+      client-code: ${SMARTAPI_CLIENT_CODE:}
+      pin: ${SMARTAPI_PIN:}
+      totp-secret: ${SMARTAPI_TOTP_SECRET:}
+      state: ${SMARTAPI_STATE:prod}
+      client-local-ip: ${SMARTAPI_CLIENT_LOCAL_IP:}
+      client-public-ip: ${SMARTAPI_CLIENT_PUBLIC_IP:}
+      mac-address: ${SMARTAPI_MAC_ADDRESS:}
+      connect-timeout: ${SMARTAPI_CONNECT_TIMEOUT:5s}
+      read-timeout: ${SMARTAPI_READ_TIMEOUT:20s}
+      session-expiry-skew: ${SMARTAPI_SESSION_EXPIRY_SKEW:60s}
+      max-retries: ${SMARTAPI_MAX_RETRIES:2}
+      retry-base-delay: ${SMARTAPI_RETRY_BASE_DELAY:250ms}
+      retry-max-delay: ${SMARTAPI_RETRY_MAX_DELAY:2s}
 
 logging:
   pattern:

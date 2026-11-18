@@ -13,6 +13,13 @@ public enum ErrorCode {
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "The requested resource was not found."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "The HTTP method is not supported for this resource."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "The request media type is not supported."),
+    BROKER_AUTHENTICATION_FAILED(HttpStatus.BAD_GATEWAY, "The broker could not authenticate the configured account."),
+    BROKER_SESSION_EXPIRED(HttpStatus.SERVICE_UNAVAILABLE, "The broker session is not available."),
+    BROKER_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "The broker rate limit was exceeded."),
+    BROKER_REQUEST_REJECTED(HttpStatus.BAD_GATEWAY, "The broker rejected the request."),
+    BROKER_INVALID_RESPONSE(HttpStatus.BAD_GATEWAY, "The broker returned an invalid response."),
+    BROKER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "The broker is temporarily unavailable."),
+    BROKER_CONFIGURATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "The broker configuration is invalid."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred.");
 
     private final HttpStatus status;

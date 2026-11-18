@@ -1,5 +1,7 @@
 package com.tradingassistant.common.error;
 
+import com.tradingassistant.broker.error.BrokerExceptionHandler;
+import com.tradingassistant.broker.exception.BrokerUnavailableException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.Test;
@@ -24,7 +26,7 @@ class GlobalExceptionHandlerTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new ValidationProbeController())
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setControllerAdvice(new GlobalExceptionHandler(), new BrokerExceptionHandler())
             .build();
 
     @Test
@@ -37,6 +39,15 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.error.details[0].field").value("name"))
                 .andExpect(jsonPath("$.meta.requestId").value("unknown"));
+    }
+
+    @Test
+    void brokerUnavailableReturnsServiceUnavailableEnvelope() throws Exception {
+        mockMvc.perform(get("/test/validation/broker-failure"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("BROKER_UNAVAILABLE"))
+                .andExpect(content().string(not(containsString("broker-secret"))));
     }
 
     @Test
@@ -60,6 +71,11 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/failure")
         void fail() {
             throw new IllegalStateException("internal detail");
+        }
+
+        @GetMapping("/broker-failure")
+        void brokerFailure() {
+            throw new BrokerUnavailableException("broker-secret");
         }
     }
 

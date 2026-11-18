@@ -20,6 +20,7 @@
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <otp-java.version>2.2.0</otp-java.version>
     </properties>
 
     <dependencies>
@@ -39,6 +40,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- RFC 6238 TOTP generation. The algorithm is supplied by a maintained library, not implemented here. -->
+        <dependency>
+            <groupId>com.github.bastiaanjansen</groupId>
+            <artifactId>otp-java</artifactId>
+            <version>${otp-java.version}</version>
         </dependency>
 
         <!-- JUnit, AssertJ, Mockito and Spring Boot test infrastructure. -->
