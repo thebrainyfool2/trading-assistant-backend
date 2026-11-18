@@ -14,7 +14,11 @@ public sealed interface MarketEvent
         permits TickReceivedEvent, CandleCompletedEvent, IndicatorUpdatedEvent,
         SessionStartedEvent, SessionExpiredEvent, MarketAssessmentGeneratedEvent,
         OptionsAssessmentGeneratedEvent, StrategyEvaluatedEvent, TradeQualifiedEvent,
-        RiskAssessmentGeneratedEvent {
+        RiskAssessmentGeneratedEvent, OrderCreatedEvent, OrderValidatedEvent,
+        OrderSubmittedEvent, OrderAcceptedEvent, OrderRejectedEvent,
+        OrderPartiallyFilledEvent, OrderFilledEvent, OrderCancelledEvent,
+        PositionOpenedEvent, PositionModifiedEvent, PositionClosedEvent,
+        PortfolioUpdatedEvent, TradeCompletedEvent {
 
     MarketEventType type();
 
