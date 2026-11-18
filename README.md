@@ -4,7 +4,7 @@ Spring Boot 4.1.2 backend foundation for the Trading Assistant platform. Java 21
 
 This backend is maintained as an independent Git repository. The future Android client lives in a separate repository under the workspace `frontend/` directory.
 
-Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. Phase 7 adds the option chain and options analytics engine, which describes the derivatives market — chain structure, Greeks, implied volatility, open interest, put/call ratios, max pain, expected move and liquidity — without producing signals. There is still no database, user authentication, trading logic, order placement, strategy engine, or Android client.
+Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. Phase 7 adds the option chain and options analytics engine, which describes the derivatives market — chain structure, Greeks, implied volatility, open interest, put/call ratios, max pain, expected move and liquidity — without producing signals. Phase 8 adds the strategy evaluation engine, which answers whether predefined strategy rules currently evaluate to true, without recommending, ranking or qualifying trades. There is still no database, user authentication, trading logic, order placement, trade qualification, or Android client.
 
 ## Prerequisites
 
@@ -132,6 +132,17 @@ com.tradingassistant
 │   ├── service     Chain provider and options assessment event adapter
 │   ├── volatility  IV solver, per-leg resolver and bounded IV history
 │   └── exception   Options validation failures
+├── strategy
+│   ├── api         StrategyRule contract
+│   ├── condition   Read-only condition lookups used by rules
+│   ├── config      Immutable, validated strategy engine configuration
+│   ├── domain      Definitions, evaluations, rule outcomes and context
+│   ├── engine      Composition, status aggregation and optional parallel evaluation
+│   ├── registry    Thread-safe registry and built-in sample strategies
+│   ├── rule        Indicator, assessment and option rule records
+│   ├── service     Market data staging and assessment-to-evaluation adapter
+│   ├── validation  Definition, context and batch validation
+│   └── exception   Strategy validation and evaluation failures
 └── system
     ├── api       System controller and HTTP DTO
     ├── application System information use case
@@ -300,6 +311,20 @@ Phase 7 describes the derivatives market. It consumes option contracts, quotes, 
 
 The full architecture, chain and domain model, pricing and IV design, analytics rules, validation strategy, event integration and testing report is in [`docs/phase-7-report.md`](docs/phase-7-report.md).
 
+## Strategy evaluation engine (Phase 8)
+
+Phase 8 answers one question per strategy: do its predefined conditions currently evaluate to true? It consumes market and option assessments, evaluates immutable rule collections and publishes immutable evaluations; it never recommends, ranks, qualifies, sizes or trades.
+
+- `strategy.domain`: `StrategyDefinition` (identity, category, declared inputs, ordered rules), `StrategyEvaluation` (status, rule evaluations, summary), `RuleEvaluation` (derived `passed()`, deterministic reason, descriptive metadata) and the validated `StrategyEvaluationContext`.
+- `strategy.rule`: fourteen immutable rule records across indicator, assessment and option rules. Every rule reports `PASSED`, `FAILED` or `INSUFFICIENT_DATA` with a field-specific reason and never assumes a missing value.
+- `strategy.engine`: `StrategyEvaluationEngine` is stateless and filters disabled strategies. Status aggregation is deterministic, `strictValidation` reports missing declared inputs once, `failFast` controls rule-failure propagation, and parallel evaluation uses only an injected executor and preserves input order.
+- `strategy.registry`: thread-safe `StrategyRegistry` with atomic register, replace, unregister, lookup, enabled/disabled snapshots, duplicate detection and configured limits; `BuiltInStrategies` provides fifteen deterministic sample strategies.
+- `strategy.service`: consumes `MarketAssessmentGeneratedEvent` and `OptionsAssessmentGeneratedEvent`, evaluates only when the two describe the same instrument and instant, keeps bounded per-instrument staging, and publishes `StrategyEvaluatedEvent`.
+- `strategy.config`: immutable `StrategyEngineConfig` with enable, parallel, limit, fail-fast and strict-validation knobs; no runtime mutation.
+- No recommendation, ranking, trade qualification, risk, sizing, capital allocation, order, portfolio, backtesting, persistence, scheduler or notification logic is included.
+
+The full architecture, rule system, registry, engine semantics, validation, event integration and testing report is in [`docs/phase-8-report.md`](docs/phase-8-report.md).
+
 ## Security notes
 
 - No API keys, secrets, credentials, or tokens are present in the repository.
@@ -333,6 +358,7 @@ The full architecture, chain and domain model, pricing and IV design, analytics 
 - Phase 5 aggregation across every interval, interval rollover, duplicate/late/future/out-of-session ticks, empty intervals, calendar sessions, holidays and special sessions, session creation and expiry, event order and delivery, registry lookup and concurrency, lifecycle shutdown and a multi-instrument replay dataset
 - Phase 6 trend, momentum, volatility, participation, structure and session scenarios, warm-up and strict-policy handling, missing and misaligned indicators, configuration validation, immutable outputs, event publication, replay parity and a 2,000-event multi-instrument replay
 - Phase 7 chain construction, expiry and moneyness classification, Greek reference values and limits, implied-volatility recovery and history statistics, smile, skew and surface, open-interest change and build-up, PCR aggregation, max pain, expected move, liquidity, validation, event publication, replay idempotence, multi-underlying isolation, a 410-leg five-expiry chain and configuration validation
+- Phase 8 strategy registration and replacement, duplicate detection, all fifteen built-in strategies, rule evaluation, partial and insufficient outcomes, strict input handling, fail-fast containment, parallel determinism, immutable models and snapshots, event publication, cache alignment, instrument isolation and configuration validation
 
 The opt-in live tests are skipped unless `SMARTAPI_LIVE_TESTS=true` and real credentials are present:
 
@@ -347,4 +373,4 @@ mvn -Dtest=AngelOneLiveIntegrationTest test
 
 The Phase 2 test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. The Phase 3 test maps the real instrument master and option contracts into the domain. Both were run successfully against a real account and never print credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
 
-Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md); Phase 7 results are in [`docs/phase-7-report.md`](docs/phase-7-report.md).
+Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md); Phase 7 results are in [`docs/phase-7-report.md`](docs/phase-7-report.md); Phase 8 results are in [`docs/phase-8-report.md`](docs/phase-8-report.md).
