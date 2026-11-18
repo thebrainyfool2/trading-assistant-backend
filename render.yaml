@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: trading-assistant-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: APP_NAME
+        value: Trading Assistant API
+      - key: APP_API_VERSION
+        value: v1

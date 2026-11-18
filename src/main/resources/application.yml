@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: trading-assistant-api
+  profiles:
+    default: local
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  address: ${SERVER_ADDRESS:0.0.0.0}
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  compression:
+    enabled: true
+    mime-types: application/json
+    min-response-size: 1024
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-exception: false
+    whitelabel:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+
+app:
+  name: ${APP_NAME:Trading Assistant API}
+  description: ${APP_DESCRIPTION:Market analysis and trade monitoring platform}
+  api-version: ${APP_API_VERSION:v1}
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [%X{requestId:-}] %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.tradingassistant: INFO

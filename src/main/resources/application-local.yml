@@ -1,0 +1,4 @@
+logging:
+  level:
+    com.tradingassistant: DEBUG
+    org.springframework.web: INFO
