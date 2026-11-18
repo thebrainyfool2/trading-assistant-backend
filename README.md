@@ -4,7 +4,7 @@ Spring Boot 4.1.2 backend foundation for the Trading Assistant platform. Java 21
 
 This backend is maintained as an independent Git repository. The future Android client lives in a separate repository under the workspace `frontend/` directory.
 
-Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. There is still no database, user authentication, trading logic, order placement, strategy engine, or Android client.
+Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. There is still no database, user authentication, trading logic, order placement, strategy engine, or Android client.
 
 ## Prerequisites
 
@@ -105,6 +105,13 @@ com.tradingassistant
 │   ├── validation Candle ordering, OHLC, volume and gap checks
 │   ├── exception Indicator validation and calculation failures
 │   └── util      Decimal math, candle math and rolling windows
+├── pipeline
+│   ├── aggregation Tick-to-candle aggregation, policies and bucket alignment
+│   ├── calendar    Exchange calendars, trading days, sessions and holiday hooks
+│   ├── event       Sealed immutable events, publisher contract and event bus
+│   ├── session     Indicator session registry, lifecycle policies and snapshots
+│   ├── exception   Safe pipeline, session and delivery failures
+│   └── (root)      Processing pipeline, subscriptions, lifecycle manager and wiring
 └── system
     ├── api       System controller and HTTP DTO
     ├── application System information use case
@@ -227,6 +234,21 @@ Phase 4 is a standalone mathematical layer over Phase 3 candles. It does not kno
 
 The full architecture, formulas, defaults, validation, precision, performance and testing report is in [`docs/phase-4-report.md`](docs/phase-4-report.md).
 
+## Market processing infrastructure (Phase 5)
+
+Phase 5 turns the Phase 2-4 libraries into a running pipeline. It contains infrastructure only: no interpretation, no strategy and no signals.
+
+- `pipeline.aggregation`: `CandleAggregator`, `AggregationPolicy`, `AggregationResult`, `AggregationStatus` and session-anchored or market-date bucket aligners for one through sixty minutes and one day.
+- `pipeline.session`: `IndicatorSessionRegistry`, `IndicatorSession`, `IndicatorSessionKey`, `SessionRegistryPolicy`, `IndicatorSessionSnapshot` and a lifecycle listener. One long-lived indicator instance per instrument, interval and canonicalized configuration.
+- `pipeline.event`: sealed `MarketEvent` (`TickReceivedEvent`, `CandleCompletedEvent`, `IndicatorUpdatedEvent`, `SessionStartedEvent`, `SessionExpiredEvent`), `MarketEventBus`, publisher and listener contracts.
+- `pipeline.calendar`: `MarketCalendar`, `WeeklyMarketCalendar`, `TradingSession`, `SessionWindow` and `MarketCalendarRegistry` for NSE, BSE, MCX, CDS and NCDEX.
+- `pipeline`: `MarketProcessingPipeline` (tick -> aggregator -> candle -> session -> event), `MarketSessionLifecycleManager` (start, drain, idle sweep, shutdown, recovery hook) and conditional Spring wiring.
+- Aggregation never fills an empty interval, never restates a closed candle and never invents a candle outside a session. Duplicate and out-of-order ticks are rejected by sequence number, and future timestamps are bounded by a skew tolerance.
+- Indicators and all other state remain inside sessions; the registry never evicts silently and expires only idle sessions or on shutdown.
+- No intelligence, strategy, signal, risk, option, Greek, persistence, database, scheduler, notification, backtesting or trade-monitoring logic is included.
+
+The full architecture, aggregation and session policies, event model, validation and concurrency strategy, and testing report is in [`docs/phase-5-report.md`](docs/phase-5-report.md).
+
 ## Security notes
 
 - No API keys, secrets, credentials, or tokens are present in the repository.
@@ -257,6 +279,7 @@ The full architecture, formulas, defaults, validation, precision, performance an
 - WebSocket subscription serialization, ping/pong, binary tick decoding and graceful close
 - Phase 3 domain validation, all market mappers, market-time policy, service orchestration, feed bridging and conditional wiring
 - Phase 4 reference values, all sixteen indicators, warm-up, incremental parity, reset behavior, configuration, validation, gap detection, immutability and a 5,000-candle performance bound
+- Phase 5 aggregation across every interval, interval rollover, duplicate/late/future/out-of-session ticks, empty intervals, calendar sessions, holidays and special sessions, session creation and expiry, event order and delivery, registry lookup and concurrency, lifecycle shutdown and a multi-instrument replay dataset
 
 The opt-in live tests are skipped unless `SMARTAPI_LIVE_TESTS=true` and real credentials are present:
 
@@ -271,4 +294,4 @@ mvn -Dtest=AngelOneLiveIntegrationTest test
 
 The Phase 2 test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. The Phase 3 test maps the real instrument master and option contracts into the domain. Both were run successfully against a real account and never print credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
 
-Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md).
+Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md).
