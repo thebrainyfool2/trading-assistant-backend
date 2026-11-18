@@ -4,7 +4,7 @@ Spring Boot 4.1.2 backend foundation for the Trading Assistant platform. Java 21
 
 This backend is maintained as an independent Git repository. The future Android client lives in a separate repository under the workspace `frontend/` directory.
 
-Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. There is still no database, user authentication, trading logic, order placement, strategy engine, option analytics, or Android client.
+Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. Phase 7 adds the option chain and options analytics engine, which describes the derivatives market — chain structure, Greeks, implied volatility, open interest, put/call ratios, max pain, expected move and liquidity — without producing signals. There is still no database, user authentication, trading logic, order placement, strategy engine, or Android client.
 
 ## Prerequisites
 
@@ -121,6 +121,17 @@ com.tradingassistant
 │   ├── session     Bounded per-instrument analysis history
 │   ├── service     Indicator-update to assessment event adapter
 │   └── exception   Intelligence validation failures
+├── options
+│   ├── analysis    Greeks, open interest, PCR, max pain, expected move and liquidity analyzers
+│   ├── chain       Chain builder, moneyness and expiry classifiers
+│   ├── config      Immutable, validated options analytics configuration
+│   ├── domain      Chain, assessment, Greeks, volatility, interest and liquidity models
+│   ├── engine      Composition and overall assessment status
+│   ├── greeks      Black-Scholes-Merton pricing and sensitivity engine
+│   ├── math        Decimal elementary functions and expiry time
+│   ├── service     Chain provider and options assessment event adapter
+│   ├── volatility  IV solver, per-leg resolver and bounded IV history
+│   └── exception   Options validation failures
 └── system
     ├── api       System controller and HTTP DTO
     ├── application System information use case
@@ -254,7 +265,7 @@ Phase 5 turns the Phase 2-4 libraries into a running pipeline. It contains infra
 - `pipeline`: `MarketProcessingPipeline` (tick -> aggregator -> candle -> session -> event), `MarketSessionLifecycleManager` (start, drain, idle sweep, shutdown, recovery hook) and conditional Spring wiring.
 - Aggregation never fills an empty interval, never restates a closed candle and never invents a candle outside a session. Duplicate and out-of-order ticks are rejected by sequence number, and future timestamps are bounded by a skew tolerance.
 - Indicators and all other state remain inside sessions; the registry never evicts silently and expires only idle sessions or on shutdown.
-- No intelligence, strategy, signal, risk, option, Greek, persistence, database, scheduler, notification, backtesting or trade-monitoring logic is included.
+- No intelligence, strategy, signal, risk, option, Greek, persistence, database, scheduler, notification, backtesting or trade-monitoring logic is included in the pipeline.
 
 The full architecture, aggregation and session policies, event model, validation and concurrency strategy, and testing report is in [`docs/phase-5-report.md`](docs/phase-5-report.md).
 
@@ -272,6 +283,22 @@ Phase 6 describes the market. It consumes completed candles, indicator results a
 - No options, Greeks, implied volatility, PCR, risk, strategy, trade qualification, position sizing, order, persistence, database, scheduler, AI or notification logic is included.
 
 The full architecture, assessment model, analyzer rules, configuration, warm-up and validation policy, event integration and testing report is in [`docs/phase-6-report.md`](docs/phase-6-report.md).
+
+## Option chain & options analytics engine (Phase 7)
+
+Phase 7 describes the derivatives market. It consumes option contracts, quotes, a spot price and the market assessment of the same instant, and produces one immutable `OptionsAssessment`; it never produces a signal, a recommendation, a score, a trade direction, a position size or a risk measure.
+
+- `options.chain`: `OptionChainBuilder` groups contracts by expiry and strike, orders them deterministically, rejects duplicate contracts and mixed underlyings or segments, excludes expired expiries and unquoted legs (reporting both), and classifies moneyness and weekly/monthly expiries.
+- `options.domain`: immutable `OptionChain`, `ExpiryChain`, `StrikeGroup`, `Strike` and `ChainSnapshot`, plus `OptionsAssessment` with separate chain, volatility, Greeks, open-interest, PCR, expected-move, liquidity and max-pain summaries.
+- `options.greeks`: `BlackScholesModel` and `GreeksEngine` compute delta, gamma, theta, vega and rho in `BigDecimal`, with documented units and deterministic rejection of invalid inputs.
+- `options.volatility`: implied-volatility solving by bracketed bisection, per-leg resolution, a bounded in-memory history, and ATM volatility, change, rank, percentile, trend, smile, skew and prepared surface.
+- `options.analysis`: open-interest and volume change, concentration, support/resistance zones, build-up classification, PCR by open interest and volume, max-pain curve, expected move and liquidity description.
+- `options.service`: consumes `MarketAssessmentGeneratedEvent`, resolves a chain capture through `OptionChainProvider`, keeps per-underlying volatility history and previous chain state, and publishes `OptionsAssessmentGeneratedEvent`.
+- `options.config`: immutable `OptionsAnalyticsConfig` covering ATM band and deep-moneyness thresholds, liquidity floors, IV and Greek model parameters, PCR aggregation, expected-move method and horizons, smile range and max-pain nearest strikes.
+- Validation is deterministic: empty chains, mixed underlyings or segments, duplicate contracts or strikes, missing spot, chain/assessment timestamp or instrument mismatch, out-of-range volatility, unsolvable premiums and invalid configurations are rejected or reported as unavailable, never guessed.
+- No strategy, recommendation, signal, entry/exit, risk, sizing, capital allocation, portfolio, order, broker execution, database, persistence, scheduler, notification, AI, ML or backtesting logic is included.
+
+The full architecture, chain and domain model, pricing and IV design, analytics rules, validation strategy, event integration and testing report is in [`docs/phase-7-report.md`](docs/phase-7-report.md).
 
 ## Security notes
 
@@ -305,6 +332,7 @@ The full architecture, assessment model, analyzer rules, configuration, warm-up 
 - Phase 4 reference values, all sixteen indicators, warm-up, incremental parity, reset behavior, configuration, validation, gap detection, immutability and a 5,000-candle performance bound
 - Phase 5 aggregation across every interval, interval rollover, duplicate/late/future/out-of-session ticks, empty intervals, calendar sessions, holidays and special sessions, session creation and expiry, event order and delivery, registry lookup and concurrency, lifecycle shutdown and a multi-instrument replay dataset
 - Phase 6 trend, momentum, volatility, participation, structure and session scenarios, warm-up and strict-policy handling, missing and misaligned indicators, configuration validation, immutable outputs, event publication, replay parity and a 2,000-event multi-instrument replay
+- Phase 7 chain construction, expiry and moneyness classification, Greek reference values and limits, implied-volatility recovery and history statistics, smile, skew and surface, open-interest change and build-up, PCR aggregation, max pain, expected move, liquidity, validation, event publication, replay idempotence, multi-underlying isolation, a 410-leg five-expiry chain and configuration validation
 
 The opt-in live tests are skipped unless `SMARTAPI_LIVE_TESTS=true` and real credentials are present:
 
@@ -319,4 +347,4 @@ mvn -Dtest=AngelOneLiveIntegrationTest test
 
 The Phase 2 test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. The Phase 3 test maps the real instrument master and option contracts into the domain. Both were run successfully against a real account and never print credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
 
-Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md).
+Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md); Phase 7 results are in [`docs/phase-7-report.md`](docs/phase-7-report.md).

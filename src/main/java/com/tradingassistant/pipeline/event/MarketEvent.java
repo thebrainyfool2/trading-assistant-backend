@@ -12,7 +12,8 @@ import java.time.Instant;
  */
 public sealed interface MarketEvent
         permits TickReceivedEvent, CandleCompletedEvent, IndicatorUpdatedEvent,
-        SessionStartedEvent, SessionExpiredEvent, MarketAssessmentGeneratedEvent {
+        SessionStartedEvent, SessionExpiredEvent, MarketAssessmentGeneratedEvent,
+        OptionsAssessmentGeneratedEvent {
 
     MarketEventType type();
 
