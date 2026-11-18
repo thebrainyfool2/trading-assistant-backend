@@ -4,7 +4,7 @@ Spring Boot 4.1.2 backend foundation for the Trading Assistant platform. Java 21
 
 This backend is maintained as an independent Git repository. The future Android client lives in a separate repository under the workspace `frontend/` directory.
 
-Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. There is still no database, user authentication, trading logic, order placement, strategy engine, or Android client.
+Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. There is still no database, user authentication, trading logic, order placement, strategy engine, or Android client.
 
 ## Prerequisites
 
@@ -90,6 +90,12 @@ com.tradingassistant
 │   ├── error     Broker-to-platform exception translation
 │   ├── exception Safe broker error categories
 │   └── angelone  SmartAPI adapter: auth, session, REST market data, WebSocket feed
+├── market
+│   ├── domain    Immutable instruments, quotes, candles, depth, ticks and options
+│   ├── mapping   Provider-to-domain mappers and boundary conversion
+│   ├── service   Instrument, quote, historical, feed and market-data services
+│   ├── time      Indian market session and UTC/IST conversion policy
+│   └── exception Application market-data failures
 └── system
     ├── api       System controller and HTTP DTO
     ├── application System information use case
@@ -148,7 +154,7 @@ services:
 - Region: Oregon
 - Repository visibility: public, so Render can build without a GitHub App connection in the new Render account
 
-The service definition uses the free compute plan, which is appropriate for Phase 1/2 validation but not for continuous monitoring. Phase 2 deploys with the broker disabled unless `SMARTAPI_ENABLED=true` and all required values are set in Render. Automatic deploys from `main` are active; a documentation push during verification triggered a successful deployment. Manual deploys can also be triggered with `render deploys create srv-dbut8f9srm7s73ftpni0`. See the reports for the networking implications.
+The service definition uses the free compute plan, which is appropriate for Phase 1/2/3 validation but not for continuous monitoring. Phase 2 deploys with the broker disabled unless `SMARTAPI_ENABLED=true` and all required values are set in Render. Automatic deploys from `main` are active; a documentation push during verification triggered a successful deployment. Manual deploys can also be triggered with `render deploys create srv-dbut8f9srm7s73ftpni0`. See the reports for the networking implications.
 
 ## SmartAPI integration (Phase 2)
 
@@ -183,6 +189,19 @@ Capabilities:
 
 The full discovery, architecture, endpoint verification and limitations are in [`docs/phase-2-report.md`](docs/phase-2-report.md).
 
+## Market domain (Phase 3)
+
+Phase 3 is the application's internal market language. SmartAPI DTOs remain in the adapter; the application consumes only immutable domain models and domain services.
+
+- `market.domain`: `Instrument`, `Quote`, `Candle`, `MarketDepth`, `DepthLevel`, `Tick`, `OptionContract`, `Exchange`, `Segment`, `Interval`, `MarketStatus`, `QuoteMode`, `TickMode`, `OptionType` and `Currency`.
+- `market.mapping`: dedicated instrument, quote, candle, depth, tick and option-contract mappers, plus the market-time policy.
+- `market.service`: `InstrumentService`, `QuoteService`, `HistoricalDataService`, `MarketDataService`, domain feed listener and feed handle. Services are wired only when `SMARTAPI_ENABLED=true`.
+- Domain timestamps are UTC `Instant`s; SmartAPI request times are converted to `Asia/Kolkata` only at the provider boundary. Quotes use application receipt time because the provider quote payload has no timestamp.
+- Prices use `BigDecimal`; no floating-point arithmetic or silent rounding is applied to market values. Quantities and volumes are integral.
+- No cache, database, scheduler, indicator, strategy, risk engine, Greeks, option chain or order operation is included.
+
+The full domain documentation, mapping architecture, validation/time/precision policy and test results are in [`docs/phase-3-report.md`](docs/phase-3-report.md).
+
 ## Security notes
 
 - No API keys, secrets, credentials, or tokens are present in the repository.
@@ -211,8 +230,9 @@ The full discovery, architecture, endpoint verification and limitations are in [
 - quote, candle and instrument-master mapping, including partial quote failures and documented limits
 - HTTP headers, bounded retries, rate-limit and malformed-response translation
 - WebSocket subscription serialization, ping/pong, binary tick decoding and graceful close
+- Phase 3 domain validation, all market mappers, market-time policy, service orchestration, feed bridging and conditional wiring
 
-The opt-in live test is skipped unless `SMARTAPI_LIVE_TESTS=true` and real credentials are present:
+The opt-in live tests are skipped unless `SMARTAPI_LIVE_TESTS=true` and real credentials are present:
 
 ```bash
 SMARTAPI_LIVE_TESTS=true \
@@ -223,6 +243,6 @@ SMARTAPI_MAC_ADDRESS='...' \
 mvn -Dtest=AngelOneLiveIntegrationTest test
 ```
 
-That test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. It was run successfully on 18 November 2026 against a real account and never prints credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
+The Phase 2 test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. The Phase 3 test maps the real instrument master and option contracts into the domain. Both were run successfully against a real account and never print credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
 
-Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md).
+Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md).
