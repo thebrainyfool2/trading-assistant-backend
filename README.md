@@ -4,7 +4,7 @@ Spring Boot 4.1.2 backend foundation for the Trading Assistant platform. Java 21
 
 This backend is maintained as an independent Git repository. The future Android client lives in a separate repository under the workspace `frontend/` directory.
 
-Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. There is still no database, user authentication, trading logic, order placement, strategy engine, or Android client.
+Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. There is still no database, user authentication, trading logic, order placement, strategy engine, or Android client.
 
 ## Prerequisites
 
@@ -96,6 +96,15 @@ com.tradingassistant
 │   ├── service   Instrument, quote, historical, feed and market-data services
 │   ├── time      Indian market session and UTC/IST conversion policy
 │   └── exception Application market-data failures
+├── indicator
+│   ├── api       Indicator lifecycle and factory contracts
+│   ├── domain    Immutable results, series, statuses and value keys
+│   ├── engine    Pluggable registry and calculation facade
+│   ├── calculator Sixteen trend, momentum, volatility, strength and volume calculators
+│   ├── config    Validated parameters and selectable price sources
+│   ├── validation Candle ordering, OHLC, volume and gap checks
+│   ├── exception Indicator validation and calculation failures
+│   └── util      Decimal math, candle math and rolling windows
 └── system
     ├── api       System controller and HTTP DTO
     ├── application System information use case
@@ -198,9 +207,25 @@ Phase 3 is the application's internal market language. SmartAPI DTOs remain in t
 - `market.service`: `InstrumentService`, `QuoteService`, `HistoricalDataService`, `MarketDataService`, domain feed listener and feed handle. Services are wired only when `SMARTAPI_ENABLED=true`.
 - Domain timestamps are UTC `Instant`s; SmartAPI request times are converted to `Asia/Kolkata` only at the provider boundary. Quotes use application receipt time because the provider quote payload has no timestamp.
 - Prices use `BigDecimal`; no floating-point arithmetic or silent rounding is applied to market values. Quantities and volumes are integral.
-- No cache, database, scheduler, indicator, strategy, risk engine, Greeks, option chain or order operation is included.
+- No cache, database, scheduler, strategy, risk engine, Greeks, option chain or order operation is included.
 
 The full domain documentation, mapping architecture, validation/time/precision policy and test results are in [`docs/phase-3-report.md`](docs/phase-3-report.md).
+
+## Technical indicator engine (Phase 4)
+
+Phase 4 is a standalone mathematical layer over Phase 3 candles. It does not know about strategies, signals, positions, users, options, risk or broker sessions.
+
+- `indicator.api`: `Indicator` lifecycle and `IndicatorFactory` extension point.
+- `indicator.domain`: immutable `IndicatorResult`, `IndicatorSeries`, status and named value keys.
+- `indicator.engine`: `IndicatorEngine` registry for historical calculation and independent incremental instances.
+- `indicator.calculator`: SMA, EMA, WMA, RSI, MACD, Stochastic RSI, ATR, Bollinger Bands, Keltner Channels, Donchian Channels, ADX, DMI, VWAP, OBV, CMF and Supertrend.
+- `indicator.config`: validated periods, smoothing, multiplier, deviation and `PriceSource`.
+- `indicator.validation`: null, OHLC, volume, duplicate, ordering, insufficient-history and interval-gap checks.
+- Historical calculations retain warm-up rows; incremental updates reuse state and reject duplicate/out-of-order candles.
+- All outputs are immutable named-value maps. Prices and calculations use `BigDecimal`; division and square root use DECIMAL128.
+- No strategy, signal, trade, risk, option, persistence, scheduler or notification logic is included.
+
+The full architecture, formulas, defaults, validation, precision, performance and testing report is in [`docs/phase-4-report.md`](docs/phase-4-report.md).
 
 ## Security notes
 
@@ -231,6 +256,7 @@ The full domain documentation, mapping architecture, validation/time/precision p
 - HTTP headers, bounded retries, rate-limit and malformed-response translation
 - WebSocket subscription serialization, ping/pong, binary tick decoding and graceful close
 - Phase 3 domain validation, all market mappers, market-time policy, service orchestration, feed bridging and conditional wiring
+- Phase 4 reference values, all sixteen indicators, warm-up, incremental parity, reset behavior, configuration, validation, gap detection, immutability and a 5,000-candle performance bound
 
 The opt-in live tests are skipped unless `SMARTAPI_LIVE_TESTS=true` and real credentials are present:
 
@@ -245,4 +271,4 @@ mvn -Dtest=AngelOneLiveIntegrationTest test
 
 The Phase 2 test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. The Phase 3 test maps the real instrument master and option contracts into the domain. Both were run successfully against a real account and never print credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
 
-Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md).
+Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md).
