@@ -3,7 +3,7 @@
 **Project:** Trading Assistant  
 **Phase:** 1 — Production-ready backend foundation  
 **Report date:** 18 November 2026  
-**Status:** Implementation and local verification complete. Render deployment is **blocked** by the absence of a GitHub remote and initial commit. Awaiting architectural review and approval.
+**Status:** Implementation, local verification, GitHub publication, and Render deployment complete. Awaiting architectural review and approval.
 
 ---
 
@@ -25,11 +25,14 @@ Completed:
 - Multi-stage Dockerfile for Render
 - Render Blueprint in `render.yaml`
 - Maven tests and live-profile verification
-- Repository documentation and the requested `frontend/` directory, intentionally reserved for the later Android phase
+- Separate private frontend repository reserved for the later Android phase
+- Independent backend Git repository, published to GitHub
+- Live Render deployment with verified public endpoints
+- Actual Render outbound IP ranges retrieved from the deployed service
 
 Explicitly not included: SmartAPI, MongoDB, authentication, WebSockets, market data, strategies, risk logic, trade monitoring, notifications, backtesting, paper trading, and Android code.
 
-Deployment status: the Render Blueprint validates, and the application runs correctly under the production profile. A Render deployment could not be performed because the local Git repository has no GitHub remote or commit, and Render builds Docker services from Git. The authenticated Render CLI cannot upload local source. No Render URL therefore exists yet.
+Deployment status: **live** at <https://trading-assistant-api-x856.onrender.com>. The backend is the `thebrainyfool2/trading-assistant-backend` repository and is public so Render can build it without a GitHub App connection. The frontend repository remains private. Render reports the service's shared outbound ranges as `74.220.48.0/24` and `74.220.56.0/24` in the Oregon region.
 
 ---
 
@@ -103,59 +106,57 @@ Client errors are logged at debug level. Unexpected failures are logged at error
 ## 3. Folder Structure
 
 ```text
-TradingAssistant/
+backend/  (independent Git repository)
+├── .dockerignore
 ├── .gitattributes
 ├── .gitignore
+├── Dockerfile
 ├── README.md
+├── pom.xml
 ├── render.yaml
-├── backend/
-│   ├── .dockerignore
-│   ├── Dockerfile
-│   ├── README.md
-│   ├── pom.xml
-│   └── src/
-│       ├── main/
-│       │   ├── java/com/tradingassistant/
-│       │   │   ├── TradingAssistantApplication.java
-│       │   │   ├── common/
-│       │   │   │   ├── api/
-│       │   │   │   │   ├── ApiError.java
-│       │   │   │   │   ├── ApiErrorResponse.java
-│       │   │   │   │   ├── ApiMeta.java
-│       │   │   │   │   ├── ApiResponse.java
-│       │   │   │   │   ├── ErrorCode.java
-│       │   │   │   │   ├── FieldViolation.java
-│       │   │   │   │   └── RequestContext.java
-│       │   │   │   ├── error/
-│       │   │   │   │   └── GlobalExceptionHandler.java
-│       │   │   │   └── web/
-│       │   │   │       └── RequestIdFilter.java
-│       │   │   ├── config/
-│       │   │   │   └── ApplicationProperties.java
-│       │   │   └── system/
-│       │   │       ├── api/
-│       │   │       │   ├── SystemController.java
-│       │   │       │   └── dto/
-│       │   │       │       └── SystemInfoResponse.java
-│       │   │       ├── application/
-│       │   │       │   └── SystemInfoService.java
-│       │   │       └── domain/
-│       │   │           └── SystemInfo.java
-│       │   └── resources/
-│       │       ├── application.yml
-│       │       ├── application-local.yml
-│       │       └── application-prod.yml
-│       └── test/
-│           └── java/com/tradingassistant/
-│               ├── TradingAssistantApplicationTests.java
-│               ├── common/error/
-│               │   └── GlobalExceptionHandlerTest.java
-│               └── system/api/
-│                   └── SystemEndpointIntegrationTest.java
-├── frontend/
-│   └── README.md              Reserved for Android/Kotlin/Compose; no code in Phase 1
-└── docs/
-    └── phase-1-report.md
+├── docs/
+│   └── phase-1-report.md
+└── src/
+    ├── main/
+    │   ├── java/com/tradingassistant/
+    │   │   ├── TradingAssistantApplication.java
+    │   │   ├── common/
+    │   │   │   ├── api/
+    │   │   │   │   ├── ApiError.java
+    │   │   │   │   ├── ApiErrorResponse.java
+    │   │   │   │   ├── ApiMeta.java
+    │   │   │   │   ├── ApiResponse.java
+    │   │   │   │   ├── ErrorCode.java
+    │   │   │   │   ├── FieldViolation.java
+    │   │   │   │   └── RequestContext.java
+    │   │   │   ├── error/
+    │   │   │   │   └── GlobalExceptionHandler.java
+    │   │   │   └── web/
+    │   │   │       └── RequestIdFilter.java
+    │   │   ├── config/
+    │   │   │   └── ApplicationProperties.java
+    │   │   └── system/
+    │   │       ├── api/
+    │   │       │   ├── SystemController.java
+    │   │       │   └── dto/
+    │   │       │       └── SystemInfoResponse.java
+    │   │       ├── application/
+    │   │       │   └── SystemInfoService.java
+    │   │       └── domain/
+    │   │           └── SystemInfo.java
+    │   └── resources/
+    │       ├── application.yml
+    │       ├── application-local.yml
+    │       └── application-prod.yml
+    └── test/java/com/tradingassistant/
+        ├── TradingAssistantApplicationTests.java
+        ├── common/error/GlobalExceptionHandlerTest.java
+        └── system/api/SystemEndpointIntegrationTest.java
+
+frontend/  (separate private Git repository)
+├── .gitattributes
+├── .gitignore
+└── README.md              Reserved for Android/Kotlin/Compose; no code in Phase 1
 ```
 
 ### Package responsibilities
@@ -301,18 +302,27 @@ The server was stopped after the checks; port 18080 no longer accepted connectio
 
 ### 6.2 Render deployment design
 
-The root `render.yaml` defines:
+The backend repository root contains the Blueprint:
 
-- service type: web
-- runtime: Docker
-- service root: `backend`
-- Dockerfile: `./Dockerfile` relative to the service root
-- Docker context: `.` relative to the service root
-- health check: `/actuator/health`
-- auto-deploy: on commits to the connected branch
-- build filter: `backend/**`
-- production profile and public application metadata
-- free compute plan for Phase 1 only
+```yaml
+services:
+  - type: web
+    name: trading-assistant-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    autoDeployTrigger: off   # enable after connecting the Render GitHub App
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: APP_NAME
+        value: Trading Assistant API
+      - key: APP_API_VERSION
+        value: v1
+```
 
 The Dockerfile is multi-stage:
 
@@ -336,27 +346,47 @@ render blueprints validate ./render.yaml --output json
 }
 ```
 
+The service was created through the Render CLI against the new Render account (`thebrainyfools3@gmail.com`) using the public backend repository URL. The account is separate from the older Render CLI account that contains `maze-reminder-bot-ohio`; that unrelated service was not modified.
+
+Because the backend was added through Render's public Git repository flow, Render's documented behavior is that automatic Git webhook deploys are unavailable unless the Render GitHub App is connected later. The Blueprint therefore sets `autoDeployTrigger: off`; deployment is manual until the GitHub App is connected. Trigger a manual deploy with `render deploys create <serviceId>`.
+
 ### 6.3 Deployment status
 
-**Not deployed.**
+**Live.**
 
-- **Render URL:** none
-- **Deployment status:** blocked before service creation
-- **Reason:** the local repository is initialized on `main`, but it has no remote, no initial commit, and no GitHub repository. Render builds Docker services from a Git repository. The authenticated Render CLI confirms an existing workspace and an unrelated service (`maze-reminder-bot-ohio`), but its `services create` command requires `--repo`; the CLI does not upload local source.
-- **Existing Render resources:** the unrelated existing service was not modified.
-- **Local Docker verification:** not performed because Docker is not installed on this machine. The Maven jar, production profile, HTTP contract, and Blueprint schema were verified independently.
+- **Render URL:** <https://trading-assistant-api-x856.onrender.com>
+- **Service name:** `trading-assistant-api`
+- **Service ID:** `srv-dbut8f9srm7s73ftpni0`
+- **Dashboard:** <https://dashboard.render.com/web/srv-dbut8f9srm7s73ftpni0>
+- **Region:** Oregon
+- **Plan:** Free (Phase 1 only)
+- **Deployed commit:** `7394e38dbe03cfacb9520939d7766d80f602b1ec`
+- **Deploy status:** `live` after the corrected health-check redeploy
+- **Repository visibility:** public backend repository; private frontend repository
 
-### 6.4 Deployment procedure once a repository exists
+The remote Docker build executed the complete Maven test suite successfully (9 tests, 0 failures) before producing the runtime image. The first deploy was created with a Windows-converted health-check path caused by Git Bash path translation; the service configuration was corrected to `/actuator/health` and a clean redeploy was made. The corrected deploy reached `live`.
 
-1. Create a GitHub repository and push this monorepo to its default branch. A private repository is appropriate; no secrets are present.
-2. In Render, choose **New → Blueprint**, connect the repository, and apply the root `render.yaml`.
-3. Render builds `backend/Dockerfile` and deploys the web service.
-4. Verify:
-   - `https://<service-name>.onrender.com/actuator/health` returns `200` with status `UP`.
-   - `https://<service-name>.onrender.com/api/v1/system/info` returns the success envelope with `environment: "prod"` and version `0.1.0`.
-   - An unknown path returns the 404 error envelope.
-5. Retrieve the service's outbound IP information using the procedure in Section 7.
-6. Replace the free plan with an always-on paid plan before continuous monitoring or WebSocket work.
+Verified on the public origin:
+
+| Check | Expected | Actual |
+|---|---|---|
+| `GET /actuator/health` | 200 with status UP | Passed |
+| `GET /api/v1/system/info` | 200 with version 0.1.0 and `environment: "prod"` | Passed |
+| `X-Request-Id: phase1-render-check` | Echoed in header and response metadata | Passed |
+| `GET /api/v1/unknown` | 404 `RESOURCE_NOT_FOUND` envelope | Passed |
+| `POST /api/v1/system/info` | 405 `METHOD_NOT_ALLOWED` envelope | Passed |
+| Render TLS/edge | HTTPS endpoint reachable through Render/Cloudflare | Passed |
+
+### 6.4 Reproducible deployment procedure
+
+1. Push the backend repository to GitHub on `main`.
+2. Either connect the Render GitHub App for automatic deploys or use the public repository URL as done here.
+3. Create the web service with the backend repository, branch `main`, Docker runtime, region `oregon`, plan `free`, and health check `/actuator/health`.
+4. Set `SPRING_PROFILES_ACTIVE=prod`, `APP_NAME=Trading Assistant API`, and `APP_API_VERSION=v1`.
+5. Deploy and wait until Render reports `live`.
+6. Verify the public health and system endpoints, request-ID echo, and both error envelopes.
+7. Retrieve the service's outbound IP information using the procedure in Section 7.
+8. Replace the free plan with an always-on paid plan before continuous monitoring or WebSocket work.
 
 No deployment should be considered complete until the public health and system endpoints have been checked on the deployed origin.
 
@@ -368,23 +398,29 @@ No deployment should be considered complete until the public health and system e
 
 Render services send outbound traffic through **shared IP ranges associated with their region**. The ranges are shared across all services in that region; they are not a single per-service address. Render documents the ranges in CIDR notation and states that a service may use any address in its associated ranges.
 
-**Actual ranges for this project could not be determined because no Render service exists yet.** They must not be guessed.
+**Actual ranges for this deployed service:** Render's API returned type `shared` with CIDR ranges `74.220.48.0/24` and `74.220.56.0/24` for the Oregon service. These are shared across services in the Oregon region, not dedicated to this service. They were retrieved on 18 November 2026 and should be rechecked if the region or Render's ranges change.
 
 ### 7.2 How to retrieve the outbound IP information
 
-After deployment:
+The verified ranges for this deployment came from the authenticated Render API:
+
+```http
+GET https://api.render.com/v1/services/srv-dbut8f9srm7s73ftpni0/outbound-ips
+Authorization: Bearer <RENDER_API_TOKEN>
+```
+
+Response:
+
+```json
+{"ips":["74.220.48.0/24","74.220.56.0/24"],"type":"shared"}
+```
+
+To retrieve them from the Dashboard instead:
 
 1. Open the Render Dashboard.
 2. Open the **specific service** details page, not the workspace home.
 3. Open the **Connect** dropdown in the upper right.
 4. Switch to the **Outbound** tab and copy the listed CIDR ranges.
-
-Alternatively, use the authenticated Render API:
-
-```http
-GET https://api.render.com/v1/services/{serviceId}/outbound-ips
-Authorization: Bearer <RENDER_API_TOKEN>
-```
 
 The response distinguishes shared and dedicated outbound IPs and lists the addresses or ranges that apply to the service.
 
@@ -413,10 +449,10 @@ This platform is explicitly not an order-placement system: the human user always
 
 ### 7.5 Networking limitations discovered
 
-1. Outbound ranges are regional and shared; they are not a per-service static address.
-2. Actual ranges require a deployed service. None exists yet.
-3. Dedicated IPs require a paid workspace plan and a separate monthly fee.
-4. Render's **free web service spins down after 15 minutes without traffic** and wakes on the next request. This is acceptable for a Phase 1 smoke test, but **not acceptable for continuous live trade monitoring or WebSocket sessions**. An always-on paid compute plan is required before those phases.
+1. Outbound ranges are regional and shared; they are not a per-service static address. The deployed Oregon service currently uses `74.220.48.0/24` and `74.220.56.0/24`.
+2. Dedicated IPs require a paid workspace plan and a separate monthly fee.
+3. Render's **free web service spins down after 15 minutes without traffic** and wakes on the next request. This is acceptable for a Phase 1 smoke test, but **not acceptable for continuous live trade monitoring or WebSocket sessions**. An always-on paid compute plan is required before those phases.
+4. The backend repository is public solely so Render can build it without a GitHub App connection in the new Render account. If the repository is made private later, the Render GitHub App must be connected and access granted before future deploys.
 
 ---
 
@@ -474,42 +510,42 @@ render blueprints validate ./render.yaml --output json
 
 Expected: valid Blueprint with one planned service. Actual: `"valid": true`, one service (`trading-assistant-api`). Passed.
 
-### 8.4 Not tested / limitations
+### 8.4 Render deployment verification
 
-- **Docker image build:** not run locally because Docker is not installed. The Dockerfile is syntactically reviewed and follows Render's documented multi-stage Docker pattern, but remote image construction remains unverified until a Render deploy.
-- **Render deployment:** not performed. No public URL exists.
-- **Render outbound IP retrieval:** impossible before service creation.
+The public deployment was checked after Render reported `live`:
+
+| Check | Expected | Actual |
+|---|---|---|
+| Remote Docker build | Maven tests and image build succeed | Passed; 9 tests passed in build logs |
+| Health endpoint | 200, status UP | Passed |
+| System info endpoint | 200, version 0.1.0, `environment: "prod"` | Passed |
+| Request correlation | Header and metadata echo | Passed |
+| Unknown path | 404 envelope | Passed |
+| Unsupported method | 405 envelope | Passed |
+| Render outbound IP API | Shared ranges returned | Passed; `74.220.48.0/24`, `74.220.56.0/24` |
+
+### 8.5 Not tested / limitations
+
+- **Local Docker image build:** not run because Docker is not installed on this machine. The remote Render Docker build did succeed and executed the tests.
 - **Android client:** intentionally not implemented or tested.
 - **Load, performance, and security penetration testing:** out of Phase 1 scope.
+- **Automatic Git deploys:** not available through the public Git repository flow unless the Render GitHub App is connected. Manual deploy works.
 
 ---
 
 ## 9. Problems Encountered
 
-### 9.1 Render deployment blocked by missing GitHub repository — unresolved
+### 9.1 Private repository could not be read by the new Render account — resolved
 
-**Problem:** Render deploys Docker web services from a Git repository. A local `.git` repository has been initialized on `main`, but it has no remote, no initial commit, and no GitHub repository. The Render CLI is authenticated, but the CLI's service creation requires a repository URL; there is no local-source upload command.
+**Problem:** The backend and frontend were created as separate private repositories. The new Render account had no GitHub App connection, so Render could not fetch the private backend repository.
 
-**Impact:** The "Deploy to Render" and "Verify deployment" tasks cannot be completed in this session.
+**Resolution:** With user approval, the backend repository was made public and the Render service was created from its public Git URL. The frontend repository remains private. The service deployed successfully. The trade-off is that the backend source and commit metadata are public; if private deployment is required later, connect the Render GitHub App and grant it access before changing visibility.
 
-**Possible solutions:**
-
-1. The user creates an empty GitHub repository and pushes this monorepo. This is the recommended path.
-2. The user provides an existing repository URL and explicitly authorizes pushing the project.
-3. The user connects the repository in the Render Dashboard and applies the Blueprint manually.
-
-A local Git repository was initialized on `main`, but no GitHub repository was created, committed, or pushed, because those external actions were not explicitly requested and could expose or relocate the user's code.
-
-### 9.2 Docker unavailable locally — limitation
+### 9.2 Docker unavailable locally — resolved remotely
 
 **Problem:** `docker` is not installed on the machine, so the production image could not be built locally.
 
-**Impact:** Docker build behavior and the non-root runtime were not executed locally. Maven packaging and the jar were fully verified.
-
-**Possible solutions:**
-
-- Install Docker Desktop and run `docker build -t trading-assistant-backend backend`.
-- Let Render build the image after the repository is connected, then inspect the deploy logs.
+**Resolution:** Render built the multi-stage Docker image remotely. The build log shows the Maven tests passing and the runtime container starting successfully on port 10000. Local Docker verification remains unavailable, but the production image path is verified on Render.
 
 ### 9.3 Render free plan is not suitable for live monitoring — accepted Phase 1 trade-off
 
@@ -519,13 +555,11 @@ A local Git repository was initialized on `main`, but no GitHub repository was c
 
 **Solution:** Before Phase 2 live-monitoring work, change the plan to an always-on paid compute plan (currently `0.5c-512mb` at approximately $7/month, or larger). This is a deliberate billing decision for the user/reviewer.
 
-### 9.4 Actual outbound IP ranges unavailable — expected
+### 9.4 Outbound IP ranges — resolved
 
-**Problem:** Render outbound ranges are tied to the deployed service and region. No service exists yet.
+**Problem:** Render outbound ranges are tied to the deployed service and region and could not be determined before deployment.
 
-**Impact:** Cannot supply the current CIDR list or confirm allowlisting with a future provider.
-
-**Solution:** Deploy first, then retrieve the ranges from the service's **Connect → Outbound** panel or the Render API. Do not use another service's ranges.
+**Resolution:** The Render API returned shared Oregon ranges `74.220.48.0/24` and `74.220.56.0/24` for `srv-dbut8f9srm7s73ftpni0`. These are not dedicated addresses and should be rechecked before future provider allowlisting.
 
 ### 9.5 First test run had one assertion failure — resolved
 
@@ -543,25 +577,44 @@ A local Git repository was initialized on `main`, but no GitHub repository was c
 
 **Solution:** Add a minimal Java 21/Maven CI workflow in a later approved phase. It was not added now to avoid scope expansion beyond the requested Phase 1 deliverables.
 
+### 9.7 Render CLI used the wrong workspace initially — resolved
+
+**Problem:** The Render CLI had a saved workspace from a different Render account (`thebrainyfools2`), while the supplied API key belongs to `thebrainyfools3`. The first service listing failed with a 404 for the old owner ID.
+
+**Resolution:** The correct workspace ID (`tea-dbusm4sipgvc739spjd0`) was selected for the key account, and the service was created there. The old account's unrelated `maze-reminder-bot-ohio` service was not modified.
+
+### 9.8 Health-check path was converted by Git Bash — resolved
+
+**Problem:** Passing `/actuator/health` to the Render CLI on Windows converted it into a local Windows path. The first deploy therefore had an invalid health-check path and did not become live.
+
+**Resolution:** The service configuration was corrected to `/actuator/health`, the stuck deploy was cancelled, and a clean redeploy reached `live`. The public health endpoint was verified afterward.
+
+### 9.9 Render API key was shared in chat — rotation recommended
+
+**Problem:** The Render API key was supplied directly in the conversation.
+
+**Resolution:** The key was used only as a process environment variable for Render operations. It was not written into either repository, committed, or included in documentation. Because it appeared in chat, it should be rotated/revoked in the Render account after this review.
+
 ---
 
 ## 10. Recommendations
 
-1. **Approve Phase 1** after reviewing the architecture, error contract, and test evidence.
-2. **Create/push the GitHub repository**, connect it to Render, and apply the Blueprint. Verify the public health and system endpoints on the deployed origin before treating deployment as complete.
-3. **Record the deployed service's outbound ranges** from Render after deployment. Do not assume the ranges of the existing unrelated service apply.
-4. **Upgrade to an always-on Render plan before live monitoring.** The free plan's spin-down behavior conflicts with continuous market monitoring and WebSockets.
-5. **Keep SmartAPI credentials out of the repository.** Phase 2 should use Render environment variables or a managed secret store, with separate values for local and deployed environments.
-6. **Confirm Angel One requirements at Phase 2 kickoff.** Current documentation ties static-IP allowlisting to order/GTT APIs, not market data or login. Since this platform never places orders, dedicated Render IPs are not currently justified; revisit only if requirements change.
-7. **Introduce MongoDB only when a phase has a concrete persistence requirement.** Define collections, indexes, retention, and migration/initialization strategy before adding the dependency.
-8. **Add CI and automated deployment checks** after the repository is on GitHub. At minimum, run `mvn verify` for every pull request.
-9. **Consider structured JSON logging and metrics** when a log aggregation or monitoring backend exists. Do not add them speculatively.
-10. **Do not start Phase 2 implementation** until this report is reviewed and explicitly approved.
+1. **Approve Phase 1** after reviewing the architecture, error contract, deployment evidence, and test results.
+2. **Rotate the Render API key** that was shared in chat and store future keys only in a secret manager or CI secret store.
+3. **Decide the final backend repository visibility.** It is currently public so the new Render account can build it without a GitHub App. If private source is preferred, connect the Render GitHub App and grant access before changing visibility.
+4. **Connect GitHub to Render if automatic deploys are required.** The current public-repository flow supports manual deploys, not Git webhook auto-deploys.
+5. **Upgrade to an always-on Render plan before live monitoring.** The free plan's spin-down behavior conflicts with continuous market monitoring and WebSockets.
+6. **Keep SmartAPI credentials out of the repository.** Phase 2 should use Render environment variables or a managed secret store, with separate values for local and deployed environments.
+7. **Confirm Angel One requirements at Phase 2 kickoff.** Current documentation ties static-IP allowlisting to order/GTT APIs, not market data or login. Since this platform never places orders, dedicated Render IPs are not currently justified; revisit only if requirements change.
+8. **Introduce MongoDB only when a phase has a concrete persistence requirement.** Define collections, indexes, retention, and migration/initialization strategy before adding the dependency.
+9. **Add CI and automated deployment checks.** At minimum, run `mvn verify` for every pull request; add a deployment workflow only when the release process is agreed.
+10. **Consider structured JSON logging and metrics** when a log aggregation or monitoring backend exists. Do not add them speculatively.
+11. **Do not start Phase 2 implementation** until this report is reviewed and explicitly approved.
 
 ---
 
 ## Approval Gate
 
-Phase 1 implementation is complete and locally verified. Render deployment is blocked by the missing GitHub remote and initial commit. The next action requires explicit reviewer approval and, for deployment, an authorized GitHub repository connection.
+Phase 1 implementation, separate repository setup, GitHub publication, Render deployment, live endpoint verification, and outbound IP retrieval are complete. The phase is presented for architectural review.
 
-**Awaiting approval. No further phase work has started.**
+**Awaiting approval. No Phase 2 work has started.**

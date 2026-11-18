@@ -118,7 +118,7 @@ docker build -t trading-assistant-backend .
 docker run --rm -p 10000:10000 -e PORT=10000 -e SPRING_PROFILES_ACTIVE=prod trading-assistant-backend
 ```
 
-Render uses `backend/` as the service root, so `Dockerfile` is resolved relative to that directory by the root `render.yaml`.
+The Dockerfile is at this repository's root. Render builds it from the connected repository with `dockerfilePath: ./Dockerfile`.
 
 ## Render deployment
 
@@ -133,7 +133,15 @@ services:
     healthCheckPath: /actuator/health
 ```
 
-The service definition currently uses the free compute plan, which is appropriate for a Phase 1 smoke deployment but not for continuous monitoring. See the root report for deployment status and the networking implications.
+**Live deployment:** <https://trading-assistant-api-x856.onrender.com>
+
+- Health: <https://trading-assistant-api-x856.onrender.com/actuator/health>
+- System info: <https://trading-assistant-api-x856.onrender.com/api/v1/system/info>
+- Service ID: `srv-dbut8f9srm7s73ftpni0`
+- Region: Oregon
+- Repository visibility: public, so Render can build without a GitHub App connection in the new Render account
+
+The service definition uses the free compute plan, which is appropriate for Phase 1 validation but not for continuous monitoring. Because it was added through Render's public Git repository flow, automatic Git webhook deploys are unavailable unless the Render GitHub App is connected later; trigger manual deploys with `render deploys create srv-dbut8f9srm7s73ftpni0`. See the report for the networking implications.
 
 ## Security notes
 
