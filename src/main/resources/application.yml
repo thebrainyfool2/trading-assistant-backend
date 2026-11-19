@@ -5,11 +5,12 @@ spring:
     default: local
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  mongodb:
+    # Spring Boot 4 uses spring.mongodb.uri for the client connection. The local
+    # profile adds a credential-free localhost fallback for development.
+    uri: ${MONGODB_URI}
   data:
     mongodb:
-      # The connection string is supplied only through the environment. The local
-      # profile adds a credential-free localhost fallback for development.
-      uri: ${MONGODB_URI}
       auto-index-creation: false
       representation:
         big-decimal: string

@@ -7,7 +7,8 @@ listed here are persisted.
 ## Database and connection
 
 - Database name: **`trading_assistant`**
-- Configuration key: `spring.data.mongodb.uri`
+- Configuration key: `spring.mongodb.uri` (Spring Boot 4; the old
+  `spring.data.mongodb.uri` key is ignored)
 - Environment variable: **`MONGODB_URI`** (the only production source)
 - Never use the `boom` database.
 - Never commit a connection string or credentials.
@@ -19,6 +20,15 @@ mongodb+srv://<user>:<password>@<cluster>/trading_assistant?retryWrites=true&w=m
 The URI is required in the shared and production profiles. Only the `local`
 profile has a fallback: `mongodb://localhost:27017/trading_assistant`. Always
 include the database path; otherwise the driver selects `test`.
+
+Spring Boot 4 uses `spring.mongodb.uri` for the client connection. The former
+`spring.data.mongodb.uri` key is ignored by the auto-configuration; the
+remaining Spring Data settings (`auto-index-creation` and
+`representation.big-decimal`) stay under `spring.data.mongodb`.
+
+A dedicated `trading_assistant` database has been created on the existing Atlas
+cluster. It contains the nine application collections and the indexes below;
+the unrelated `boom` database was not modified.
 
 MongoDB is treated as an external dependency. `MongoClientConfiguration` sets a
 5-second server-selection timeout, 5-second connect timeout and 10-second socket

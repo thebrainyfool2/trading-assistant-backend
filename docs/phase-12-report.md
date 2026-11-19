@@ -268,13 +268,17 @@ available; only the Android SDK platform/build tools were installed locally to
 compile the app and run JVM tests. Compiling the instrumented tests is not the
 same as executing them.
 
-Backend integration tests use `de.bwaldvogel:mongo-java-server`, not Atlas. The
-Atlas cluster was not contacted, so connection-string, network-access and Atlas
-index behavior remain deployment checks.
+Backend integration tests use `de.bwaldvogel:mongo-java-server`, not Atlas. A
+separate manual check connected to the Atlas cluster using the dedicated
+`trading_assistant` database, created its nine collections and let the
+application initialize its indexes; `/api/v1/system/status` reported
+`database: UP`. The automated suite still does not exercise Atlas, and no
+broker or Render deployment was performed.
 
 ## 11. Deliberately excluded
 
-- Deployment, publishing, Atlas provisioning, DNS, CI/CD changes.
+- Deployment, publishing, Atlas cluster provisioning/network-policy changes,
+  DNS and CI/CD changes.
 - Live broker execution validation; broker remains disabled by default.
 - Push notifications, websockets or background sync on Android.
 - Rate limiting, MFA, email verification, password reset, key rotation/JWKS.
@@ -284,7 +288,7 @@ index behavior remain deployment checks.
 
 ## 12. Follow-up work
 
-1. Validate an Atlas connection and production startup with real secrets.
+1. Validate production startup with real Render secrets and network policy.
 2. Run instrumented Android tests on an emulator/device and smoke-test against a
    deployed HTTPS API.
 3. Decide whether analysis assessments should be persisted as history; today

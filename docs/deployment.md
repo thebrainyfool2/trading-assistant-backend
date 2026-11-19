@@ -227,8 +227,9 @@ Use a dedicated non-production account for Android smoke tests.
 
 ## 11. Known deployment limitations
 
-- MongoDB Atlas was not contacted by the Phase 12 test suite. Repository tests use
-  an in-process Mongo-compatible server.
+- MongoDB Atlas connectivity and index initialization were verified manually
+  against the dedicated `trading_assistant` database. The automated test suite
+  still uses an in-process Mongo-compatible server.
 - No deployment was performed as part of Phase 12.
 - Android instrumented tests were compiled but not executed because no emulator
   is installed in the development environment.

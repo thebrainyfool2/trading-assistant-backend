@@ -2,10 +2,9 @@ server:
   port: ${PORT:10000}
 
 spring:
-  data:
-    mongodb:
-      # Required in production; startup fails without it.
-      uri: ${MONGODB_URI}
+  mongodb:
+    # Required in production; startup fails without it.
+    uri: ${MONGODB_URI}
 
 management:
   endpoints:

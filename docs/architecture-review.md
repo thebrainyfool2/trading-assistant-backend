@@ -570,8 +570,9 @@ Android:
 
 Weaknesses:
 
-- **No live Atlas test.** Connection-string format, Atlas network rules, TTL and
-  index behavior on Atlas are unverified.
+- **No automated live Atlas test.** A manual check connected to the dedicated
+  `trading_assistant` database and initialized its indexes successfully, but
+  network-policy, TTL and long-run behavior are not covered by automation.
 - **No broker/live execution test** in this phase.
 - **No load, soak, concurrency or failure-injection tests.** The dual-write and
   cancellation race are not covered.
@@ -600,7 +601,7 @@ device coverage.**
 | Persistence | Adequate | Good records/indexes, no transactions/migrations |
 | Observability | Adequate | Health/metrics/ECS logs; no tracing/alerting/audit |
 | Android | Good foundation | Compiles/tests, but no device run or offline/push |
-| Deployment | Documented, unexecuted | Render/Atlas not contacted; no production verification |
+| Deployment | Partially verified | Atlas connectivity checked manually; Render not deployed |
 
 ### Prioritized recommendations
 
@@ -640,7 +641,8 @@ The implementation is suitable for a **single trusted operator, supervised
 paper/small-capital use**, with broker credentials guarded and the engine
 portfolio treated as the sole account. It is **not approved** for public
 multi-user or unattended live trading until findings 1–4 are resolved and
-verified in an environment connected to the real Atlas cluster and broker.
+verified against the real broker and a Render deployment (Atlas connectivity
+is now checked manually).
 
 No code was changed during this review. The findings above are architectural
 observations and recommendations for a later phase.
