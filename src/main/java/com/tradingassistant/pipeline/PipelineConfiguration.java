@@ -9,6 +9,8 @@ import com.tradingassistant.pipeline.event.MarketEventSessionListener;
 import com.tradingassistant.pipeline.session.IndicatorSessionRegistry;
 import com.tradingassistant.pipeline.session.SessionLifecycleListener;
 import com.tradingassistant.pipeline.session.SessionRegistryPolicy;
+import com.tradingassistant.strategy.service.InMemoryStrategyMarketDataProvider;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -77,13 +79,42 @@ public class PipelineConfiguration {
             MarketEventPublisher marketEventPublisher,
             MarketCalendarRegistry marketCalendarRegistry,
             AggregationPolicy aggregationPolicy,
-            Clock clock) {
+            Clock clock,
+            java.util.List<MarketDataObserver> observers) {
         return new MarketProcessingPipeline(
                 indicatorSessionRegistry,
                 marketEventPublisher,
                 marketCalendarRegistry,
                 aggregationPolicy,
-                clock);
+                clock,
+                observers);
+    }
+
+    /**
+     * Keeps the strategy/risk staging current before an indicator event is
+     * published. The pipeline calls this synchronously, so an evaluation that
+     * is triggered by the event never sees stale candle data.
+     */
+    @Bean
+    public MarketDataObserver strategyMarketDataObserver(
+            ObjectProvider<InMemoryStrategyMarketDataProvider> providerProvider) {
+        InMemoryStrategyMarketDataProvider provider = providerProvider.getIfAvailable();
+        if (provider == null) {
+            return new MarketDataObserver() {
+            };
+        }
+        return new MarketDataObserver() {
+            @Override
+            public void onCandle(com.tradingassistant.market.domain.Candle candle) {
+                provider.updateCandle(candle);
+            }
+
+            @Override
+            public void onIndicators(com.tradingassistant.market.domain.Candle candle,
+                                     java.util.Map<String, com.tradingassistant.indicator.domain.IndicatorResult> indicators) {
+                provider.updateIndicators(candle.instrument(), candle.interval(), indicators);
+            }
+        };
     }
 
     @Bean

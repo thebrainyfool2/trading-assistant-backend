@@ -54,6 +54,7 @@ public final class MarketProcessingPipeline implements AutoCloseable {
     private final MarketCalendarRegistry calendars;
     private final AggregationPolicy aggregationPolicy;
     private final Clock clock;
+    private final java.util.List<MarketDataObserver> observers;
     private final ConcurrentHashMap<InstrumentKey, ChannelGroup> channels = new ConcurrentHashMap<>();
     private final Object registrationLock = new Object();
 
@@ -65,11 +66,22 @@ public final class MarketProcessingPipeline implements AutoCloseable {
             MarketCalendarRegistry calendars,
             AggregationPolicy aggregationPolicy,
             Clock clock) {
+        this(sessions, publisher, calendars, aggregationPolicy, clock, java.util.List.of());
+    }
+
+    public MarketProcessingPipeline(
+            IndicatorSessionRegistry sessions,
+            MarketEventPublisher publisher,
+            MarketCalendarRegistry calendars,
+            AggregationPolicy aggregationPolicy,
+            Clock clock,
+            java.util.List<MarketDataObserver> observers) {
         this.sessions = Objects.requireNonNull(sessions, "sessions must not be null");
         this.publisher = Objects.requireNonNull(publisher, "publisher must not be null");
         this.calendars = Objects.requireNonNull(calendars, "calendars must not be null");
         this.aggregationPolicy = Objects.requireNonNull(aggregationPolicy, "aggregationPolicy must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.observers = observers == null ? java.util.List.of() : java.util.List.copyOf(observers);
     }
 
     /**
@@ -174,6 +186,33 @@ public final class MarketProcessingPipeline implements AutoCloseable {
     }
 
     /**
+     * Feeds an already-completed historical candle through the same indicator
+     * and event path as a live candle. Used to warm the engine before the feed
+     * opens; the aggregator remains responsible for future live candles.
+     */
+    public void ingest(PipelineSubscription subscription, Candle candle) {
+        Objects.requireNonNull(subscription, "subscription must not be null");
+        Objects.requireNonNull(candle, "candle must not be null");
+        if (closed) {
+            throw new PipelineException("The market processing pipeline is closed");
+        }
+        if (!subscription.instrument().equals(candle.instrument())) {
+            throw new PipelineValidationException("Candle instrument does not match the subscription");
+        }
+        if (subscription.interval() != candle.interval()) {
+            throw new PipelineValidationException("Candle interval does not match the subscription");
+        }
+        ObserverSupport.notifyCandle(observers, candle);
+        publisher.publish(new CandleCompletedEvent(candle, clock.instant()));
+        IndicatorSession session = sessions.getOrCreate(
+                subscription.sessionKey(), subscription.indicatorTypes());
+        IndicatorSessionUpdate update = session.update(candle, clock.instant());
+        ObserverSupport.notifyIndicators(observers, candle, update.results());
+        publisher.publish(new IndicatorUpdatedEvent(
+                update.session(), candle, update.results(), clock.instant()));
+    }
+
+    /**
      * Closes the forming candle for every interval of one instrument, which is
      * the correct behaviour at session end and before shutdown.
      */
@@ -236,11 +275,33 @@ public final class MarketProcessingPipeline implements AutoCloseable {
     }
 
     private void publishCandle(Channel channel, Candle candle) {
+        ObserverSupport.notifyCandle(observers, candle);
         publisher.publish(new CandleCompletedEvent(candle, clock.instant()));
         IndicatorSession session = sessions.getOrCreate(channel.sessionKey(), channel.indicatorTypes());
         IndicatorSessionUpdate update = session.update(candle, clock.instant());
+        ObserverSupport.notifyIndicators(observers, candle, update.results());
         publisher.publish(new IndicatorUpdatedEvent(
                 update.session(), candle, update.results(), clock.instant()));
+    }
+
+    private static final class ObserverSupport {
+
+        private ObserverSupport() {
+        }
+
+        static void notifyCandle(java.util.List<MarketDataObserver> observers, Candle candle) {
+            for (MarketDataObserver observer : observers) {
+                observer.onCandle(candle);
+            }
+        }
+
+        static void notifyIndicators(java.util.List<MarketDataObserver> observers,
+                                     Candle candle,
+                                     java.util.Map<String, com.tradingassistant.indicator.domain.IndicatorResult> results) {
+            for (MarketDataObserver observer : observers) {
+                observer.onIndicators(candle, results);
+            }
+        }
     }
 
     /**

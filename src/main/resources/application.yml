@@ -98,6 +98,15 @@ app:
       max-retries: ${SMARTAPI_MAX_RETRIES:2}
       retry-base-delay: ${SMARTAPI_RETRY_BASE_DELAY:250ms}
       retry-max-delay: ${SMARTAPI_RETRY_MAX_DELAY:2s}
+  live:
+    # Read-only SmartAPI warm-up and stream for the prediction engine.
+    enabled: ${LIVE_MARKET_ENABLED:true}
+    instruments: ${LIVE_MARKET_INSTRUMENTS:NSE_CASH:2885}
+    interval: ${LIVE_MARKET_INTERVAL:FIVE_MINUTE}
+    history-days: ${LIVE_MARKET_HISTORY_DAYS:10}
+  execution:
+    # Order execution is not part of this read-only assistant and stays off.
+    enabled: ${EXECUTION_ENABLED:false}
 
 logging:
   pattern:

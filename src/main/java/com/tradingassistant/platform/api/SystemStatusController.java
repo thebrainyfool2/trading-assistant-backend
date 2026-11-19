@@ -1,8 +1,8 @@
 package com.tradingassistant.platform.api;
 
 import com.tradingassistant.common.api.ApiResponse;
-import com.tradingassistant.platform.executionapp.ExecutionGateway;
 import com.tradingassistant.platform.readmodel.PipelineSnapshotStore;
+import com.tradingassistant.platform.readmodel.AnalysisQueryService;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,17 +32,17 @@ public class SystemStatusController {
     private static final Logger log = LoggerFactory.getLogger(SystemStatusController.class);
 
     private final MongoTemplate mongoTemplate;
-    private final ExecutionGateway gateway;
+    private final AnalysisQueryService analysis;
     private final PipelineSnapshotStore readModel;
     private final ObjectProvider<BuildProperties> buildProperties;
     private final Clock clock;
 
-    public SystemStatusController(MongoTemplate mongoTemplate, ExecutionGateway gateway,
+    public SystemStatusController(MongoTemplate mongoTemplate, AnalysisQueryService analysis,
                                   PipelineSnapshotStore readModel,
                                   ObjectProvider<BuildProperties> buildProperties,
                                   Clock clock) {
         this.mongoTemplate = mongoTemplate;
-        this.gateway = gateway;
+        this.analysis = analysis;
         this.readModel = readModel;
         this.buildProperties = buildProperties;
         this.clock = clock;
@@ -52,7 +52,7 @@ public class SystemStatusController {
     public ApiResponse<StatusView> status() {
         boolean databaseUp = databaseReachable();
         String database = databaseUp ? "UP" : "DOWN";
-        String engine = gateway.available() ? "AVAILABLE" : "DISABLED";
+        String engine = analysis.engineAvailable() ? "AVAILABLE" : "DISABLED";
         String status = databaseUp ? "UP" : "DEGRADED";
         return ApiResponse.success(new StatusView(clock.instant(), status, database,
                 engine, version(), readModel.size(), uptimeSeconds()));

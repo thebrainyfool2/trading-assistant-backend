@@ -35,13 +35,13 @@ import java.time.Clock;
  * other subscriber without the engine knowing who listens.</p>
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "app.broker.angel-one", name = "enabled",
+@ConditionalOnProperty(prefix = "app.execution", name = "enabled",
         havingValue = "true")
 public class ExecutionConfiguration {
 
     @Bean
     public ExecutionConfig executionConfig(
-            @Value("${app.execution.enabled:true}") boolean enabled,
+            @Value("${app.execution.enabled:false}") boolean enabled,
             @Value("${app.execution.mode:PAPER}") String mode,
             @Value("${app.execution.broker-name:paper}") String brokerName) {
         return ExecutionConfig.builder()

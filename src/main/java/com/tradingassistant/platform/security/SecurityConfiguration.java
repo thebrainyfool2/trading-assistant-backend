@@ -2,7 +2,6 @@ package com.tradingassistant.platform.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,12 +18,9 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 /**
- * Stateless JWT security.
- *
- * <p>Public endpoints are limited to registration and login, operational health
- * and system information, and the generated API description. Every market,
- * watchlist, order, portfolio and profile endpoint requires a valid access
- * token; administrative endpoints additionally require the {@code ADMIN} role.</p>
+ * Single-owner security. There is no registration, login or token flow; a fixed
+ * local principal is installed for every request so personal watchlists and
+ * preferences keep their owner boundary without accounts.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
@@ -39,29 +35,14 @@ public class SecurityConfiguration {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            JwtAuthenticationFilter jwtAuthenticationFilter,
-            SecurityErrorHandler securityErrorHandler) throws Exception {
+            LocalPrincipalFilter localPrincipalFilter) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/v1/auth/**",
-                                "/api/v1/system/**",
-                                "/actuator/health/**",
-                                "/actuator/info",
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/error").permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .anyRequest().authenticated())
-                .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint(securityErrorHandler)
-                        .accessDeniedHandler(securityErrorHandler))
-                .addFilterBefore(jwtAuthenticationFilter,
+                .authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll())
+                .addFilterBefore(localPrincipalFilter,
                         UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
