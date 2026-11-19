@@ -21,9 +21,17 @@
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <otp-java.version>2.2.0</otp-java.version>
+        <springdoc.version>3.2.0</springdoc.version>
+        <mongo-java-server.version>1.47.0</mongo-java-server.version>
     </properties>
 
     <dependencies>
+        <!-- Jackson ObjectMapper auto-configuration used by JSON binding and the API. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jackson</artifactId>
+        </dependency>
+
         <!-- REST API support with Spring MVC and the embedded Tomcat runtime. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -40,6 +48,37 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- JWT authentication, password hashing and role-based authorization. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- HMAC JWT encoding and decoding built on Nimbus. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
+
+        <!-- MongoDB persistence for users, watchlists, history and settings. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+
+        <!-- Prometheus scrape endpoint alongside the health endpoints. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- Generated OpenAPI description and Swagger UI for the REST API. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
 
         <!-- RFC 6238 TOTP generation. The algorithm is supplied by a maintained library, not implemented here. -->
@@ -60,6 +99,21 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Security test support for authenticated request builders. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Pure-Java MongoDB wire-protocol server for repository integration tests. -->
+        <dependency>
+            <groupId>de.bwaldvogel</groupId>
+            <artifactId>mongo-java-server</artifactId>
+            <version>${mongo-java-server.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

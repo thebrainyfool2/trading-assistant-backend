@@ -20,6 +20,13 @@ public enum ErrorCode {
     BROKER_INVALID_RESPONSE(HttpStatus.BAD_GATEWAY, "The broker returned an invalid response."),
     BROKER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "The broker is temporarily unavailable."),
     BROKER_CONFIGURATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "The broker configuration is invalid."),
+
+    UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "Authentication is required or the credentials are invalid."),
+    FORBIDDEN(HttpStatus.FORBIDDEN, "The authenticated account may not perform this action."),
+    CONFLICT(HttpStatus.CONFLICT, "The request conflicts with existing state."),
+    EXECUTION_REJECTED(HttpStatus.UNPROCESSABLE_ENTITY, "The order could not be executed."),
+    ENGINE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "The trading engine is not available in this environment."),
+    DATABASE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "The database is temporarily unavailable."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred.");
 
     private final HttpStatus status;

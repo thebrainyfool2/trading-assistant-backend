@@ -1,7 +1,25 @@
 server:
   port: ${PORT:10000}
 
+spring:
+  data:
+    mongodb:
+      # Required in production; startup fails without it.
+      uri: ${MONGODB_URI}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  health:
+    mongodb:
+      enabled: true
+
 logging:
   level:
     root: INFO
     com.tradingassistant: INFO
+  structured:
+    format:
+      console: ecs

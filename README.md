@@ -1,21 +1,23 @@
 # Trading Assistant Backend
 
-Spring Boot 4.1.2 backend foundation for the Trading Assistant platform. Java 21, Maven, Spring MVC, Bean Validation, and Actuator.
+Spring Boot 4.1.2 application backend for the Trading Assistant platform. Java 21, Maven, Spring MVC, Bean Validation, Spring Security, MongoDB and Actuator.
 
-This backend is maintained as an independent Git repository. The future Android client lives in a separate repository under the workspace `frontend/` directory.
+This backend is maintained as an independent Git repository. The Android client lives in the separate repository under the workspace `frontend/` directory.
 
-Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. Phase 7 adds the option chain and options analytics engine, which describes the derivatives market — chain structure, Greeks, implied volatility, open interest, put/call ratios, max pain, expected move and liquidity — without producing signals. Phase 8 adds the strategy evaluation engine, which answers whether predefined strategy rules currently evaluate to true, without recommending, ranking or qualifying trades. Phase 9 adds the trade qualification engine, which decides whether a strategy evaluation is currently eligible for downstream consideration, without recommending, ranking, sizing or trading. Phase 10 adds the risk management and position sizing engine, which describes allowable risk boundaries — stop distance, risk budget, size, leverage and policy limits — without approving, recommending or placing anything. Phase 11 adds order management, portfolio and execution: an explicit caller intent is validated against thirteen rules, submitted through a broker abstraction, tracked through order and position lifecycles, and reflected in an in-memory portfolio. There is still no database, user authentication, live broker adapter, AI or Android client.
+Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. Phase 7 adds the option chain and options analytics engine, which describes the derivatives market — chain structure, Greeks, implied volatility, open interest, put/call ratios, max pain, expected move and liquidity — without producing signals. Phase 8 adds the strategy evaluation engine, which answers whether predefined strategy rules currently evaluate to true, without recommending, ranking or qualifying trades. Phase 9 adds the trade qualification engine, which decides whether a strategy evaluation is currently eligible for downstream consideration, without recommending, ranking, sizing or trading. Phase 10 adds the risk management and position sizing engine, which describes allowable risk boundaries — stop distance, risk budget, size, leverage and policy limits — without approving, recommending or placing anything. Phase 11 adds order management, portfolio and execution: an explicit caller intent is validated against thirteen rules, submitted through a broker abstraction, tracked through order and position lifecycles, and reflected in an in-memory portfolio. Phase 12 adds the application layer and Android client: JWT access and rotating refresh tokens, BCrypt accounts with USER/ADMIN roles, MongoDB persistence for users, watchlists, preferences, orders, trades, portfolio snapshots, notifications and settings, account-scoped REST APIs, an in-memory read model fed by engine events, maintenance jobs, OpenAPI, production observability and a 15-screen Kotlin/Jetpack Compose client. There is still no AI, ML, recommendation, backtesting, automated trading or live broker adapter. See [`docs/phase-12-report.md`](docs/phase-12-report.md).
 
 ## Prerequisites
 
 - JDK 21
 - Maven 3.9.16 or later (the tested version is 3.9.16)
+- MongoDB 6+ or an Atlas cluster for a running application (the test suite uses an in-process Mongo-compatible server)
 - Docker only if you want to build the production image locally
+- Android SDK 35 and JDK 17+ only for the separate `frontend/` client
 
 ## Build and test
 
 ```bash
-mvn -B -ntp test
+mvn -B -ntp verify
 mvn -B -ntp package
 ```
 
@@ -23,9 +25,14 @@ The Spring Boot Maven plugin produces an executable jar and a `META-INF/build-in
 
 ## Run locally
 
-The `local` profile is the default.
+The `local` profile is the default. It falls back to
+`mongodb://localhost:27017/trading_assistant` when `MONGODB_URI` is absent, and
+generates an ephemeral JWT key when `JWT_SECRET` is absent.
 
 ```bash
+# Optional overrides:
+export MONGODB_URI='mongodb://localhost:27017/trading_assistant'
+export JWT_SECRET="$(openssl rand -base64 32)"
 mvn spring-boot:run
 ```
 
@@ -39,6 +46,7 @@ Useful local checks:
 
 ```bash
 curl -i http://localhost:8080/actuator/health
+curl -i http://localhost:8080/api/v1/system/status
 curl -i http://localhost:8080/api/v1/system/info
 curl -i -H 'X-Request-Id: local-check-001' http://localhost:8080/api/v1/system/info
 curl -i http://localhost:8080/api/v1/unknown
@@ -64,14 +72,34 @@ Important behavior:
 - Server binds to `0.0.0.0` by default so Render can reach it.
 - `PORT` defaults to `10000` in the production profile; local uses `SERVER_PORT` or `8080`.
 - Graceful shutdown is enabled with a 20-second lifecycle timeout.
-- Only the Actuator `health` endpoint is exposed over HTTP.
+- Actuator exposes `health`, `info`, `metrics` and, in `prod`, `prometheus`.
 - Health details and components are hidden.
 - Error responses never include exception messages, stack traces, or exception class names.
 - The console log pattern includes the request ID from MDC.
 - JSON responses are compressed when they exceed 1 KB.
 - Configuration values are externalized through environment variables; defaults are non-secret.
 
-No `.env` file is required or read automatically. Supply environment variables through the shell, IDE run configuration, Render environment variables, or a deployment secret store.
+No `.env` file is required or read automatically. Supply environment variables through the shell, IDE run configuration, Render environment variables, or a deployment secret store. A populated `.env` file is never read by Spring Boot and must not be committed.
+
+Phase 12 environment variables:
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `MONGODB_URI` | production | Connection string including `/trading_assistant` |
+| `JWT_SECRET` | production | Base64 HMAC key, at least 32 bytes |
+| `JWT_ISSUER` | no | Token issuer, default `trading-assistant` |
+| `JWT_ACCESS_TOKEN_TTL` | no | Default `15m` |
+| `JWT_REFRESH_TOKEN_TTL` | no | Default `30d` |
+| `BCRYPT_STRENGTH` | no | Default `12` |
+| `APP_ADMIN_EMAIL` / `APP_ADMIN_PASSWORD` | no | Optional first administrator |
+| `CORS_ALLOWED_ORIGINS` | no | Comma-separated browser origins |
+| `PLATFORM_JOBS_ENABLED` | no | Maintenance scheduling, default `true` |
+| `TOKEN_CLEANUP_CRON` | no | Default hourly at `:15` UTC |
+| `PORTFOLIO_SNAPSHOT_CRON` | no | Default every 15 minutes UTC |
+| `NOTIFICATION_RETENTION_DAYS` | no | Default `30` |
+| `TOKEN_RETENTION_DAYS` | no | Default `7` |
+
+See [`docs/deployment.md`](docs/deployment.md) and [`docs/mongodb.md`](docs/mongodb.md).
 
 ## Package structure
 
@@ -179,13 +207,27 @@ com.tradingassistant
 │   ├── service     Pipeline staging, marks and intent-to-request adapter
 │   ├── validation  Request, order-id, rule-batch and mode validation
 │   └── exception   Execution validation, broker and general failures
+├── platform
+│   ├── api           Controllers, request/response DTOs, pages and OpenAPI
+│   ├── config        Mongo timeouts, index initializer, event bridge, scheduling
+│   ├── security      JWT, refresh tokens, BCrypt, filter and error handling
+│   ├── user          Accounts, roles, status and bootstrap admin
+│   ├── watchlist     Per-account watchlists
+│   ├── preferences   Theme, interval and notification preferences
+│   ├── settings      Application-wide settings
+│   ├── notification  In-app notification records
+│   ├── history       Order, trade and portfolio-snapshot persistence
+│   ├── executionapp  Order use case, portfolio query and engine gateway
+│   ├── readmodel     Bounded analysis projection fed by engine events
+│   ├── jobs          Maintenance jobs (no trading)
+│   └── error         Platform exception mapping
 └── system
     ├── api       System controller and HTTP DTO
     ├── application System information use case
     └── domain    Framework-independent system information model
 ```
 
-The code follows constructor injection, interface-light layered boundaries, and DTO separation. A full repository layer is intentionally absent because no approved phase has a persistence requirement.
+The code follows constructor injection, explicit DTO separation and a one-way dependency: `platform` may use engine types, but no engine package imports `platform`. Phase 12 adds MongoDB repositories and documents; engine caches and assessments remain in memory.
 
 ## Endpoints
 
@@ -196,6 +238,12 @@ Returns Actuator's health response. Render uses this path as its HTTP health che
 ### `GET /api/v1/system/info`
 
 Returns application name, Maven build version, active profile, and configured API version inside the standard success envelope.
+
+### `GET /api/v1/system/status` (public)
+
+Reports database reachability, engine availability, read-model size, version and uptime. It never exposes credentials or connection strings.
+
+The complete Phase 12 contract is in [`docs/api-reference.md`](docs/api-reference.md) and the generated OpenAPI description at `/v3/api-docs` (Swagger UI at `/swagger-ui.html`).
 
 ## Docker
 
@@ -408,6 +456,28 @@ Phase 11 converts a qualified, risk-assessed trade into an executable lifecycle 
 
 The full architecture, domain model, order engine, broker integration, portfolio, position lifecycle, event integration, validation, configuration, performance and testing report is in [`docs/phase-11-report.md`](docs/phase-11-report.md).
 
+## Application layer and Android client (Phase 12)
+
+Phase 12 adds the multi-user application without changing the engine calculations.
+
+- `platform.security`: stateless JWT access tokens, opaque SHA-256-hashed refresh tokens with atomic rotation, BCrypt cost 12, USER/ADMIN roles, CORS and safe authentication errors. Production refuses to start without `JWT_SECRET`.
+- `platform.api`: 50 account-scoped routes under `/api/v1` for auth, users, watchlists, orders, portfolio, positions, history, market, options, strategy, risk, settings, notifications, system and admin history.
+- `platform.history`: MongoDB records for `orders`, `trades` and `portfolio_snapshots`; `executionapp` provides the order use case, live-or-snapshot portfolio query and an `ObjectProvider` gateway to the optional engine.
+- `platform.readmodel`: `PipelineSnapshotStore` listens to the existing event bus and keeps the latest 128 market/options/strategy/risk/qualification descriptions. Analysis endpoints project those descriptions; they never recalculate them and never write engine caches to MongoDB.
+- `platform.notification`, `user`, `watchlist`, `preferences`, `settings`: durable account features. Nine collections live on the `trading_assistant` database.
+- `platform.jobs`: token cleanup, notification retention, portfolio snapshots and read-model trimming. No job places or modifies a trade.
+- Android: `frontend/` contains a Kotlin/Jetpack Compose client with Hilt, Retrofit, StateFlow, Material 3, a dark-only theme, 15 screens and local notification channels. It is a renderer of backend values, not a second calculation engine.
+
+Important operational notes:
+
+- The engine beans exist only when the broker is enabled. Without them, order routes return `503 ENGINE_UNAVAILABLE`; portfolio responses fall back to the latest snapshot (`SNAPSHOT`) or `UNAVAILABLE`.
+- `MONGODB_URI` is the only production database configuration. The requested database name is `trading_assistant`; never use `boom`.
+- The analysis read model is in memory and rebuilt after restart; it is not history.
+- The portfolio is the single engine/house account, not a per-user aggregate. Do not treat the current implementation as a multi-tenant portfolio service.
+- `runtime` limits, dual-write and security gaps are documented in [`docs/architecture-review.md`](docs/architecture-review.md).
+
+See the [Phase 12 report](docs/phase-12-report.md) for the full delivery and verification record.
+
 ## Security notes
 
 - No API keys, secrets, credentials, or tokens are present in the repository.
@@ -416,12 +486,18 @@ The full architecture, domain model, order engine, broker integration, portfolio
 - The broker session manager keeps tokens in memory only; it does not persist them.
 - User-supplied request IDs are accepted only if they match `[A-Za-z0-9._-]{1,64}`; otherwise the server generates a UUID.
 - The Docker runtime uses an unprivileged user.
-- Actuator exposure is restricted to health, with details disabled.
+- Actuator exposure is restricted to health, info, metrics and (production) Prometheus; health details are disabled.
+- JWT secrets and MongoDB credentials come only from the environment. No token, password or connection string is logged or returned.
+- The production profile fails startup when `JWT_SECRET` is absent or shorter than 256 bits.
+- Refresh tokens are stored only as SHA-256 hashes and rotate on every use.
 - The global exception handler returns safe messages and logs unexpected failures server-side.
+- See [`docs/architecture-review.md`](docs/architecture-review.md) for unresolved security hardening items (MFA, rate limiting, audit logging and global portfolio visibility).
 
 ## Testing
 
-`mvn test` currently covers:
+`mvn -B -ntp verify` currently runs **1,072 tests with 0 failures and 2 skipped** (the two opt-in live broker tests). Phase 12 contributes 166 tests under `com.tradingassistant.platform`: 108 unit, 40 controller and 18 HTTP/Mongo integration tests. The existing 906 engine and system tests remain green.
+
+Coverage includes:
 
 - Spring application context startup and the disabled-by-default broker wiring
 - system information success envelope and build version
@@ -445,6 +521,9 @@ The full architecture, domain model, order engine, broker integration, portfolio
 - Phase 9 qualification success, failure, partial and insufficient outcomes, unknown states, duplicate suppression, every built-in rule, confidence and participation floors, session and option-liquidity rules, option freshness and session alignment, timestamp and instrument mismatches, registry operations, parallel determinism, immutability, event publication, staging order, configuration and wiring
 - Phase 10 stop and size derivation, volatility adjustment, fractional and whole-unit quantities, instrument overrides, every built-in risk rule, within-limit, breach, partial and insufficient outcomes, fail-fast containment, parallel determinism, immutable models, registry operations, configuration validation, staging order, aligned option and indicator filtering, event publication and Spring wiring
 - Phase 11 order creation, validation and every rejection path, the forward-only order state machine, order store eviction and duplicate detection, the paper broker (fills, partial fills, rejections, retries, cancellation), broker and rule registries, portfolio margins, realised and unrealised P&L, position open/add/partial close/close arithmetic, the engine lifecycle and event order, cancellation rules, bounded service caches, marks, immutability, configuration, concurrency and Spring wiring
+- Phase 12 registration/login/refresh rotation, JWT expiry and production-secret rules, BCrypt accounts, role authorization, watchlist ownership and limits, order placement/cancellation use cases, portfolio live/snapshot fallback, history services and event listeners, notification preferences and records, application settings, read-model projection, maintenance jobs, all controller contracts, the full Spring security chain and Mongo-compatible repository integration
+
+The separate Android repository has 21 JVM tests (API contract, login/register, dashboard, orders, watchlist and settings view models) and three compiled Compose UI tests. Android instrumented tests require an emulator and are not part of this backend build.
 
 The opt-in live tests are skipped unless `SMARTAPI_LIVE_TESTS=true` and real credentials are present:
 
@@ -459,4 +538,4 @@ mvn -Dtest=AngelOneLiveIntegrationTest test
 
 The Phase 2 test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. The Phase 3 test maps the real instrument master and option contracts into the domain. Both were run successfully against a real account and never print credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
 
-Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md); Phase 7 results are in [`docs/phase-7-report.md`](docs/phase-7-report.md); Phase 8 results are in [`docs/phase-8-report.md`](docs/phase-8-report.md); Phase 9 results are in [`docs/phase-9-report.md`](docs/phase-9-report.md); Phase 10 results are in [`docs/phase-10-report.md`](docs/phase-10-report.md); Phase 11 results are in [`docs/phase-11-report.md`](docs/phase-11-report.md).
+Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md); Phase 7 results are in [`docs/phase-7-report.md`](docs/phase-7-report.md); Phase 8 results are in [`docs/phase-8-report.md`](docs/phase-8-report.md); Phase 9 results are in [`docs/phase-9-report.md`](docs/phase-9-report.md); Phase 10 results are in [`docs/phase-10-report.md`](docs/phase-10-report.md); Phase 11 results are in [`docs/phase-11-report.md`](docs/phase-11-report.md); Phase 12 results are in [`docs/phase-12-report.md`](docs/phase-12-report.md). The full API contract is [`docs/api-reference.md`](docs/api-reference.md), deployment is [`docs/deployment.md`](docs/deployment.md), MongoDB is [`docs/mongodb.md`](docs/mongodb.md), and the 20-section review is [`docs/architecture-review.md`](docs/architecture-review.md).

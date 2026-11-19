@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -66,8 +67,20 @@ class SystemEndpointIntegrationTest {
     }
 
     @Test
-    void unknownResourceReturnsNotFoundEnvelope() throws Exception {
+    void unknownResourceRequiresAuthenticationFirst() throws Exception {
         mockMvc.perform(get("/api/v1/does-not-exist"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.meta.requestId").isNotEmpty());
+    }
+
+    @Test
+    void unknownResourceReturnsNotFoundEnvelopeForAuthenticatedRequest()
+            throws Exception {
+        mockMvc.perform(get("/api/v1/does-not-exist")
+                        .with(user("phase-12-test").roles("USER")))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.success").value(false))

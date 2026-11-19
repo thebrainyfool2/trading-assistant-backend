@@ -5,11 +5,20 @@ spring:
     default: local
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  data:
+    mongodb:
+      # The connection string is supplied only through the environment. The local
+      # profile adds a credential-free localhost fallback for development.
+      uri: ${MONGODB_URI}
+      auto-index-creation: false
+      representation:
+        big-decimal: string
 
 server:
   address: ${SERVER_ADDRESS:0.0.0.0}
   port: ${SERVER_PORT:8080}
   shutdown: graceful
+  forward-headers-strategy: framework
   compression:
     enabled: true
     mime-types: application/json
@@ -25,18 +34,48 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,info,metrics
   endpoint:
     health:
       show-details: never
       show-components: never
       probes:
         enabled: true
+  health:
+    # Production enables the MongoDB indicator; the local default keeps the
+    # operational endpoints usable without a database.
+    mongodb:
+      enabled: false
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
 
 app:
   name: ${APP_NAME:Trading Assistant API}
   description: ${APP_DESCRIPTION:Market analysis and trade monitoring platform}
   api-version: ${APP_API_VERSION:v1}
+  security:
+    # Base64-encoded HMAC secret of at least 256 bits. Never commit a value.
+    jwt-secret: ${JWT_SECRET:}
+    issuer: ${JWT_ISSUER:trading-assistant}
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+    refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:30d}
+    bcrypt-strength: ${BCRYPT_STRENGTH:12}
+    bootstrap-admin-email: ${APP_ADMIN_EMAIL:}
+    bootstrap-admin-password: ${APP_ADMIN_PASSWORD:}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  platform:
+    scheduling:
+      enabled: ${PLATFORM_JOBS_ENABLED:true}
+      token-cleanup-cron: "${TOKEN_CLEANUP_CRON:0 15 * * * *}"
+      portfolio-snapshot-cron: "${PORTFOLIO_SNAPSHOT_CRON:0 */15 * * * *}"
+      notification-retention-days: ${NOTIFICATION_RETENTION_DAYS:30}
+      token-retention-days: ${TOKEN_RETENTION_DAYS:7}
   broker:
     angel-one:
       # Disabled by default so operational endpoints remain available without broker credentials.
