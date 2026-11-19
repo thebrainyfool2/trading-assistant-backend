@@ -12,7 +12,6 @@ import com.tradingassistant.execution.domain.PositionDirection;
 import com.tradingassistant.execution.domain.PositionStatus;
 import com.tradingassistant.execution.domain.TimeInForce;
 import com.tradingassistant.execution.domain.TradeOrder;
-import com.tradingassistant.platform.executionapp.OrderApplicationService;
 import com.tradingassistant.market.domain.InstrumentKey;
 import com.tradingassistant.market.domain.Segment;
 import com.tradingassistant.platform.history.OrderRecordDocument;
@@ -105,12 +104,6 @@ public final class PlatformTestFixtures {
         return new ExecutionResult(ExecutionStatus.REJECTED, Optional.empty(),
                 Optional.empty(), portfolio(), List.of(), Optional.empty(),
                 Optional.of("risk limits breached"), ExecutionDiagnostics.empty());
-    }
-
-    public static OrderApplicationService.PlaceOrderCommand command() {
-        return new OrderApplicationService.PlaceOrderCommand(STRATEGY_ID,
-                Segment.NSE_CASH, "2885", OrderSide.BUY, OrderType.MARKET,
-                Optional.empty(), Optional.empty(), Optional.empty(), TimeInForce.DAY);
     }
 
     public static OrderRecordDocument orderRecord(String userId) {

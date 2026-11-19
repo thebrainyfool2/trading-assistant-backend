@@ -104,9 +104,6 @@ app:
     instruments: ${LIVE_MARKET_INSTRUMENTS:NSE_CASH:2885}
     interval: ${LIVE_MARKET_INTERVAL:FIVE_MINUTE}
     history-days: ${LIVE_MARKET_HISTORY_DAYS:10}
-  execution:
-    # Order execution is not part of this read-only assistant and stays off.
-    enabled: ${EXECUTION_ENABLED:false}
 
 logging:
   pattern:
