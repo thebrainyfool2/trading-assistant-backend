@@ -5,6 +5,7 @@ import com.tradingassistant.market.domain.Segment;
 import com.tradingassistant.platform.PlatformTestFixtures;
 import com.tradingassistant.platform.error.PlatformException;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -22,7 +23,8 @@ import static org.mockito.Mockito.when;
 class WatchlistServiceTest {
 
     private final WatchlistRepository repository = mock(WatchlistRepository.class);
-    private final WatchlistService service = new WatchlistService(repository,
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+    private final WatchlistService service = new WatchlistService(repository, events,
             Clock.fixed(PlatformTestFixtures.NOW, java.time.ZoneOffset.UTC));
 
     @Test
@@ -35,6 +37,7 @@ class WatchlistServiceTest {
 
         assertThat(created.name()).isEqualTo("Momentum");
         assertThat(created.items()).isEmpty();
+        verify(events).publishEvent(new WatchlistChangedEvent("user-1"));
     }
 
     @Test
@@ -104,6 +107,7 @@ class WatchlistServiceTest {
 
         assertThat(result.items()).hasSize(1);
         verify(repository, never()).save(any());
+        verify(events, never()).publishEvent(any());
     }
 
     @Test
@@ -121,6 +125,7 @@ class WatchlistServiceTest {
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().getFirst().symbol()).isEqualTo("RELIANCE");
         assertThat(result.items().getFirst().itemId()).isNotBlank();
+        verify(events).publishEvent(new WatchlistChangedEvent("user-1"));
     }
 
     @Test
@@ -146,6 +151,7 @@ class WatchlistServiceTest {
         service.delete("user-1", "list-1");
 
         verify(repository).delete(watchlist);
+        verify(events).publishEvent(new WatchlistChangedEvent("user-1"));
     }
 
     private static WatchlistDocument withItems(List<WatchlistItem> items) {

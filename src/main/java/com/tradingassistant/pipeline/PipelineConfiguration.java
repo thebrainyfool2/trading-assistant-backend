@@ -9,8 +9,10 @@ import com.tradingassistant.pipeline.event.MarketEventSessionListener;
 import com.tradingassistant.pipeline.session.IndicatorSessionRegistry;
 import com.tradingassistant.pipeline.session.SessionLifecycleListener;
 import com.tradingassistant.pipeline.session.SessionRegistryPolicy;
+import com.tradingassistant.market.domain.Exchange;
 import com.tradingassistant.strategy.service.InMemoryStrategyMarketDataProvider;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,8 +34,17 @@ import java.time.Clock;
 public class PipelineConfiguration {
 
     @Bean
-    public MarketCalendarRegistry marketCalendarRegistry() {
-        return MarketCalendarRegistry.defaults();
+    public MarketCalendarRegistry marketCalendarRegistry(
+            @Value("${app.market.calendar.nse-holidays:}") String nseHolidays,
+            @Value("${app.market.calendar.bse-holidays:}") String bseHolidays,
+            @Value("${app.market.calendar.mcx-holidays:}") String mcxHolidays) {
+        MarketCalendarRegistry registry = MarketCalendarRegistry.defaults();
+        registry = registry.withHolidays(Exchange.NSE,
+                MarketCalendarRegistry.parseHolidays(nseHolidays));
+        registry = registry.withHolidays(Exchange.BSE,
+                MarketCalendarRegistry.parseHolidays(bseHolidays));
+        return registry.withHolidays(Exchange.MCX,
+                MarketCalendarRegistry.parseHolidays(mcxHolidays));
     }
 
     @Bean

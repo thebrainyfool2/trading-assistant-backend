@@ -1,14 +1,8 @@
 spring:
   mongodb:
     # Local development only. Production requires MONGODB_URI and never has a
-    # fallback. The database name is fixed to trading_assistant.
-    uri: ${MONGODB_URI:mongodb://localhost:27017/trading_assistant}
-
-app:
-  security:
-    # An ephemeral signing key is generated when JWT_SECRET is absent. Set
-    # JWT_SECRET to keep tokens valid across restarts.
-    jwt-secret: ${JWT_SECRET:}
+    # fallback. The database name is fixed to tradingassistant.
+    uri: ${MONGODB_URI:mongodb://localhost:27017/tradingassistant}
 
 logging:
   level:

@@ -204,7 +204,10 @@ public class AngelOneHttpClient {
                     safeCode(text(root, "errorcode")),
                     text(root, "message"));
         } catch (Exception exception) {
-            return new BrokerResponseError(null, "");
+            // SmartAPI sometimes returns a plain-text 403 for market-hours
+            // throttling. Preserve the text so it can be classified as a rate
+            // limit instead of being mistaken for invalid credentials.
+            return new BrokerResponseError(null, safeText(responseBody));
         }
     }
 
@@ -246,7 +249,18 @@ public class AngelOneHttpClient {
     }
 
     private static boolean isRateLimitMessage(int status, String message) {
-        return status == 403 && (message.contains("rate limit") || message.contains("access rate"));
+        if (status != 403 || message == null) {
+            return false;
+        }
+        return message.contains("rate limit")
+                || message.contains("access rate")
+                || message.contains("too many requests")
+                || message.contains("exceeding access");
+    }
+
+    private static String safeText(String value) {
+        String text = value == null ? "" : value.replaceAll("[\\p{Cntrl}]+", " ").trim();
+        return text.length() <= 256 ? text : text.substring(0, 256);
     }
 
     private static String safeCode(String code) {

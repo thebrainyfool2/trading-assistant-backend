@@ -1,14 +1,28 @@
 # Trading Assistant API Reference
 
 Version `v1` of the application API. The backend is the system of record and the
-only component that calculates market, strategy, qualification and risk data.
-The Android client renders these responses and never recomputes them.
+only component that calculates market, options, strategy, qualification and risk
+descriptions. The Android client renders these responses and never recomputes
+them.
 
 - Base URL (local): `http://localhost:8080`
-- Base URL (deployed example): `https://trading-assistant-api-x856.onrender.com`
 - Interactive specification: `/swagger-ui.html`
 - OpenAPI JSON: `/v3/api-docs`
 - Health: `/actuator/health`
+
+## Single-owner security model
+
+There is no registration, login, JWT, refresh token or role-based account flow.
+A fixed local principal (`local-owner`) is installed for every request so
+watchlists, preferences and notifications keep an owner boundary without
+accounts. A request therefore cannot select another owner by changing a path,
+body or header. Do not send an `Authorization` header; it is ignored.
+
+The application is read-only with respect to markets and broker execution. It
+exposes no order, portfolio, position, holding or funds endpoint. The only trade
+write endpoints record a fill the owner already executed and close local
+monitoring; neither contacts a broker. All trades are executed manually outside
+the platform.
 
 ## Response envelope
 
@@ -21,7 +35,7 @@ Success:
   "success": true,
   "data": { },
   "meta": {
-    "timestamp": "2026-11-18T09:30:00Z",
+    "timestamp": "2026-11-19T09:30:00Z",
     "requestId": "1f5c8f1e"
   }
 }
@@ -36,11 +50,11 @@ Error:
     "code": "VALIDATION_FAILED",
     "message": "Request validation failed.",
     "details": [
-      { "field": "email", "message": "must be a well-formed email address" }
+      { "field": "name", "message": "must not be blank" }
     ]
   },
   "meta": {
-    "timestamp": "2026-11-18T09:30:00Z",
+    "timestamp": "2026-11-19T09:30:00Z",
     "requestId": "1f5c8f1e"
   }
 }
@@ -49,39 +63,17 @@ Error:
 Errors never include a stack trace, exception class or internal configuration.
 `X-Request-Id` may be supplied by the caller and is echoed in the response.
 
-## Authentication
+## Limits and pagination
 
-- Access token: signed JWT, HMAC-SHA256, 15 minutes by default.
-- Refresh token: opaque random value, 30 days by default. Only its SHA-256 hash
-  is stored. It is rotated on every refresh and revoked on logout.
-- Send the access token on every protected request:
+Analysis endpoints accept `limit`. The default is `25`; values are clamped to
+`1..100`. They return the latest published descriptions, not history.
 
-```http
-Authorization: Bearer <access-token>
-```
-
-- The client refreshes once on `401` with the current refresh token. A replayed
-  refresh token is rejected because the previous token is consumed atomically.
-- Roles: `USER` and `ADMIN`. Administrative routes require `ADMIN`.
-
-### Public routes
-
-`/api/v1/auth/**`, `/api/v1/system/**`, `/actuator/health/**`,
-`/actuator/info`, `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html`,
-`/error`.
-
-Every other route requires a valid access token.
-
-## Pagination
-
-Collection endpoints use zero-based pages.
-
-Query parameters:
+Notification and other paged endpoints use zero-based pages:
 
 | Parameter | Default | Meaning |
 |---|---:|---|
 | `page` | `0` | Zero-based page number |
-| `size` | `20` | Page size; capped by the service, 100 maximum |
+| `size` | `20` | Page size |
 
 ```json
 {
@@ -99,495 +91,271 @@ Query parameters:
 |---|---:|---|
 | `VALIDATION_FAILED` | 400 | Request body or parameter validation failed |
 | `MALFORMED_REQUEST` | 400 | Body could not be parsed |
-| `UNAUTHORIZED` | 401 | Missing, invalid or expired credentials |
-| `FORBIDDEN` | 403 | Authenticated account lacks the role or ownership |
-| `RESOURCE_NOT_FOUND` | 404 | Unknown id or route after authentication |
+| `UNAUTHORIZED` | 401 | Missing credentials; not used by the local owner |
+| `FORBIDDEN` | 403 | Role or ownership check failed |
+| `RESOURCE_NOT_FOUND` | 404 | Unknown id or route |
 | `METHOD_NOT_ALLOWED` | 405 | HTTP method not supported |
-| `CONFLICT` | 409 | Duplicate email, watchlist name or trade key |
-| `EXECUTION_REJECTED` | 422 | Order intent rejected by an execution rule |
-| `ENGINE_UNAVAILABLE` | 503 | Broker/execution engine is not enabled |
+| `CONFLICT` | 409 | Duplicate watchlist name |
+| `ENGINE_UNAVAILABLE` | 503 | The broker-backed engine is not running |
 | `DATABASE_UNAVAILABLE` | 503 | MongoDB could not be reached |
 | `BROKER_*` | 429/502/503/500 | Safe broker failure category |
 | `INTERNAL_ERROR` | 500 | Unexpected failure |
 
----
+## Endpoint summary
 
-## Authentication endpoints
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/v1/system/info` | Build, runtime and configuration summary |
+| GET | `/api/v1/system/status` | Database, engine and read-model status |
+| GET | `/api/v1/market/overview` | Combined market, options, strategy, risk and qualification view |
+| GET | `/api/v1/market/assessments` | Market intelligence assessments |
+| GET | `/api/v1/market/freshness` | Tick/candle freshness and session state per observed instrument |
+| GET | `/api/v1/options/assessments` | Options analytics assessments |
+| GET | `/api/v1/instruments/search` | Search the instrument master by name or symbol |
+| GET | `/api/v1/recommendations` | Current recommendations and optional reference plans |
+| GET | `/api/v1/strategy/definitions` | Registered strategy definitions |
+| GET | `/api/v1/strategy/evaluations` | Latest strategy evaluations |
+| GET | `/api/v1/risk/assessments` | Latest risk assessments |
+| GET | `/api/v1/risk/qualifications` | Latest trade qualifications |
+| GET | `/api/v1/monitoring/active` | Active manual trades with latest monitoring result |
+| GET | `/api/v1/monitoring/history` | Recent monitoring history, optionally by trade id |
+| GET | `/api/v1/monitoring/{tradeId}` | One manual trade and its latest result |
+| GET | `/api/v1/monitoring/alerts` | Recent monitoring alerts |
+| GET | `/api/v1/monitoring/premium` | Live premium/P&L status for active option trades |
+| GET | `/api/v1/monitoring/premium/{tradeId}` | Premium status for one trade |
+| POST | `/api/v1/monitoring/trades` | Record a manually executed option fill |
+| POST | `/api/v1/monitoring/trades/{tradeId}/close` | Close local monitoring only |
+| GET | `/api/v1/watchlists` | List watchlists |
+| GET | `/api/v1/watchlists/{id}` | Read one watchlist |
+| POST | `/api/v1/watchlists` | Create a watchlist |
+| PUT | `/api/v1/watchlists/{id}` | Rename a watchlist |
+| DELETE | `/api/v1/watchlists/{id}` | Delete a watchlist |
+| POST | `/api/v1/watchlists/{id}/items` | Add an instrument |
+| DELETE | `/api/v1/watchlists/{id}/items/{itemId}` | Remove an instrument |
+| GET | `/api/v1/settings/preferences` | Read client preferences |
+| PUT | `/api/v1/settings/preferences` | Replace client preferences |
+| GET | `/api/v1/settings/application` | Read application settings |
+| PUT | `/api/v1/settings/application` | Update application settings; requires `ADMIN` |
+| GET | `/api/v1/notifications` | Paged notifications |
+| GET | `/api/v1/notifications/unread` | Unread count |
+| PUT | `/api/v1/notifications/{id}/read` | Mark one notification read |
+| PUT | `/api/v1/notifications/read-all` | Mark all notifications read |
 
-### `POST /api/v1/auth/register`
+The fixed local principal has role `USER`, so the administrative settings update
+returns `403 FORBIDDEN` in the single-owner deployment.
 
-Creates an account and returns a full token set.
+## Actionable workflow endpoints
+
+```http
+GET /api/v1/instruments/search?q=reliance
+GET /api/v1/instruments/search?q=NIFTY&segment=NSE_CASH&type=INDEX
+GET /api/v1/recommendations
+GET /api/v1/recommendations?instrument=NSE_CASH:2885&interval=FIVE_MINUTE
+POST /api/v1/monitoring/trades
+POST /api/v1/monitoring/trades/{tradeId}/close
+GET /api/v1/monitoring/premium
+GET /api/v1/monitoring/premium/{tradeId}
+```
+
+Search returns the stable `SEGMENT:TOKEN` needed by the recommendation and trade
+endpoints. By default it returns cash equity, index and other non-derivative
+rows; pass `type=OPTION` or `type=FUTURE` to search derivatives.
+
+A recommendation response includes the decision, component evidence, selected
+contract and an optional `plan`. The plan contains `suggestedEntry`,
+`targetPremium`, `stopPremium`, `suggestedQuantity`, `maximumLoss`,
+`potentialReward` and its ATR/delta diagnostics. It is a reference only; it is not
+an order.
+
+The manual trade request requires `instrument`, `recommendationType`,
+`recommendationTimestamp`, `optionSymbol`, `strike`, `expiry`, `entryPrice` and
+`quantity`:
 
 ```json
 {
-  "email": "trader@example.com",
-  "displayName": "Trader",
-  "password": "at-least-8-characters"
+  "instrument": "NSE_CASH:2885",
+  "recommendationType": "BUY_CALL",
+  "interval": "FIVE_MINUTE",
+  "recommendationTimestamp": "2026-11-18T03:45:00Z",
+  "optionSymbol": "SBIN26NOV500CE",
+  "strike": 500,
+  "expiry": "2026-11-26",
+  "entryPrice": 12.50,
+  "quantity": 75,
+  "notes": "executed manually",
+  "targetPremium": 18.00,
+  "stopPremium": 8.00
 }
 ```
 
-`201 Created` with the auth response below. Duplicate email returns `409`.
+`recommendationTimestamp` pins the exact recommendation the owner acted on, so
+the server resolves that recommendation and its chain snapshot instead of the
+newest one. A superseded or evicted pin returns `409 CONFLICT` and records
+nothing. `targetPremium`/`stopPremium` are optional overrides; if omitted, the
+pinned plan's distances (or configured fallbacks) are applied. The recorded
+trade view includes `recommendationTimestamp` for audit. Closing changes local
+monitoring state only.
 
-### `POST /api/v1/auth/login`
+Premium status compares the live option LTP with the recorded target and stop.
+The scheduled monitor raises a persisted `TRADE_ALERT` notification once when a
+boundary is reached and never exits a position automatically.
 
-```json
-{
-  "email": "trader@example.com",
-  "password": "at-least-8-characters"
-}
-```
+## Analysis endpoints
 
-`200 OK`:
+### `GET /api/v1/market/overview`
+
+Returns `{ now, engineAvailable, readModelEntries, markets, options,
+strategies, risks, qualifications }`. Each list honours `limit`.
+
+### `GET /api/v1/market/assessments`
+
+Market assessment fields include instrument, interval, timestamp, assessment
+status, warm-up flag, confidence level and basis, trend/momentum/volatility/
+participation components, structure bias and signals, and session phase.
+
+### `GET /api/v1/market/freshness`
+
+Projects the live pipeline's latest observations. It does not trigger a broker
+request and returns an empty list when no live data has been observed.
 
 ```json
 {
   "success": true,
-  "data": {
-    "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
-    "tokenType": "Bearer",
-    "expiresInSeconds": 900,
-    "accessExpiresAt": "2026-11-18T09:45:00Z",
-    "refreshToken": "opaque-random-value",
-    "refreshExpiresAt": "2026-12-18T09:30:00Z",
-    "user": {
-      "id": "66f0c0f0c0f0c0f0c0f0c0f0",
-      "email": "trader@example.com",
-      "displayName": "Trader",
-      "roles": ["USER"],
-      "status": "ACTIVE",
-      "createdAt": "2026-11-01T10:00:00Z",
-      "lastLoginAt": "2026-11-18T09:30:00Z"
-    }
-  }
-}
-```
-
-### `POST /api/v1/auth/refresh`
-
-```json
-{ "refreshToken": "opaque-random-value" }
-```
-
-Returns the same auth response with a new access token and a new refresh token.
-The submitted refresh token is consumed even if the caller does not store the
-replacement; clients must persist the returned value.
-
-### `POST /api/v1/auth/logout`
-
-```json
-{ "refreshToken": "opaque-random-value" }
-```
-
-Revokes the refresh token. The access token remains valid until it expires.
-Response data: `{ "revoked": true, "message": "Signed out." }`.
-
----
-
-## Profile and users
-
-| Method | Path | Access | Purpose |
-|---|---|---|---|
-| `GET` | `/api/v1/users/me` | USER | Current profile |
-| `PUT` | `/api/v1/users/me` | USER | Update `displayName` |
-| `PUT` | `/api/v1/users/me/password` | USER | Change password and revoke all sessions |
-| `GET` | `/api/v1/users/me/sessions` | USER | Count active refresh tokens |
-| `PUT` | `/api/v1/users/me/logout-all` | USER | Revoke every refresh token |
-| `GET` | `/api/v1/users` | ADMIN | Paged account list |
-| `GET` | `/api/v1/users/{id}` | ADMIN | One account |
-| `PUT` | `/api/v1/users/{id}/roles` | ADMIN | Replace roles |
-| `PUT` | `/api/v1/users/{id}/status` | ADMIN | Set `ACTIVE` or `DISABLED` |
-
-Update profile:
-
-```json
-{ "displayName": "New name" }
-```
-
-Change password:
-
-```json
-{
-  "currentPassword": "old-password",
-  "newPassword": "new-password-at-least-8"
-}
-```
-
-Role update:
-
-```json
-{ "roles": ["USER", "ADMIN"] }
-```
-
-Status update:
-
-```json
-{ "status": "ACTIVE" }
-```
-
-`GET /api/v1/users/me` data:
-
-```json
-{
-  "id": "66f0c0f0c0f0c0f0c0f0c0f0",
-  "email": "trader@example.com",
-  "displayName": "Trader",
-  "roles": ["USER"],
-  "status": "ACTIVE",
-  "createdAt": "2026-11-01T10:00:00Z",
-  "lastLoginAt": "2026-11-18T09:30:00Z"
-}
-```
-
----
-
-## Watchlists
-
-All routes are account-scoped. A watchlist owned by another account behaves as
-not found.
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/watchlists` | List all own watchlists |
-| `GET` | `/api/v1/watchlists/{id}` | One watchlist |
-| `POST` | `/api/v1/watchlists` | Create `{ "name": "Favourites" }` |
-| `PUT` | `/api/v1/watchlists/{id}` | Rename `{ "name": "Long term" }` |
-| `DELETE` | `/api/v1/watchlists/{id}` | Delete the list |
-| `POST` | `/api/v1/watchlists/{id}/items` | Add an instrument |
-| `DELETE` | `/api/v1/watchlists/{id}/items/{itemId}` | Remove an instrument |
-
-Add item:
-
-```json
-{
-  "symbolToken": "2885",
-  "symbol": "SBIN",
-  "segment": "NSE_CASH"
-}
-```
-
-The service normalises the name for uniqueness and enforces the maximum item
-count from application settings (100 by default).
-
-Watchlist data:
-
-```json
-{
-  "id": "66f0c0f0c0f0c0f0c0f0c0f1",
-  "name": "Favourites",
-  "items": [
+  "data": [
     {
-      "id": "66f0c0f0c0f0c0f0c0f0c0f2",
-      "symbolToken": "2885",
-      "symbol": "SBIN",
-      "segment": "NSE_CASH",
-      "addedAt": "2026-11-18T09:00:00Z"
-    }
-  ],
-  "createdAt": "2026-11-01T10:00:00Z",
-  "updatedAt": "2026-11-18T09:00:00Z"
-}
-```
-
-Segments: `NSE_CASH`, `NSE_FO`, `BSE_CASH`, `BSE_FO`, `MCX_FO`, `NSE_COM`,
-`CDS`, `NCDEX`.
-
----
-
-## Orders
-
-Orders are placed against the running engine's risk assessment. The request
-never contains a quantity: the engine's assessed size and stop are used.
-
-### `POST /api/v1/orders`
-
-```json
-{
-  "strategyId": "EMA_TREND",
-  "segment": "NSE_CASH",
-  "symbolToken": "2885",
-  "side": "BUY",
-  "type": "MARKET",
-  "limitPrice": null,
-  "triggerPrice": null,
-  "targetPrice": null,
-  "timeInForce": "DAY"
-}
-```
-
-- `side`: `BUY` or `SELL`.
-- `type`: `MARKET`, `LIMIT`, `STOP`, `STOP_LIMIT` (engine-supported values).
-- `timeInForce`: `DAY`, `IOC` or `GTC`; defaults to `DAY`.
-- Price fields are optional, positive when present.
-- `201 Created` on acceptance. `422` when an execution rule rejects the intent.
-- `503 ENGINE_UNAVAILABLE` when the broker/engine is not enabled.
-- If the client omits a required risk assessment, the engine rejects the order;
-  it does not invent a quantity.
-
-Order data:
-
-```json
-{
-  "id": "66f0c0f0c0f0c0f0c0f0c0a1",
-  "engineOrderId": "ENG-0001",
-  "strategyId": "EMA_TREND",
-  "segment": "NSE_CASH",
-  "symbolToken": "2885",
-  "side": "BUY",
-  "type": "MARKET",
-  "quantity": 100,
-  "filledQuantity": 100,
-  "limitPrice": null,
-  "triggerPrice": null,
-  "stopPrice": 780.50,
-  "targetPrice": 830.00,
-  "timeInForce": "DAY",
-  "status": "FILLED",
-  "averageFillPrice": 800.25,
-  "executionStatus": "COMPLETED",
-  "reason": null,
-  "positionId": "POS-0001",
-  "createdAt": "2026-11-18T09:30:00Z",
-  "updatedAt": "2026-11-18T09:30:01Z"
-}
-```
-
-Statuses: `CREATED`, `VALIDATED`, `SUBMITTED`, `PENDING`, `PARTIALLY_FILLED`,
-`FILLED`, `CANCELLED`, `REJECTED`, `FAILED`, `EXPIRED`.
-
-### Other order routes
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/orders?page=0&size=20` | Paged own orders, newest first |
-| `GET` | `/api/v1/orders/{id}` | One own order |
-| `POST` | `/api/v1/orders/{id}/cancel` | Ask the engine to cancel |
-
-A terminal order cannot be cancelled. The returned record reflects the engine's
-response; the Android client does not assume a cancellation succeeded.
-
----
-
-## Portfolio and positions
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/portfolio` | Normalised portfolio |
-| `GET` | `/api/v1/portfolio/summary` | Alias of the same view |
-| `GET` | `/api/v1/portfolio/positions` | Open positions |
-| `GET` | `/api/v1/positions` | Open positions |
-
-The portfolio states its source:
-
-- `LIVE`: the engine is running and returned its current snapshot.
-- `SNAPSHOT`: the latest persisted scheduled snapshot is being served.
-- `UNAVAILABLE`: no engine and no stored snapshot; monetary values are zero.
-
-```json
-{
-  "source": "LIVE",
-  "capturedAt": null,
-  "capital": 100000,
-  "availableCapital": 90000,
-  "blockedMargin": 0,
-  "usedMargin": 10000,
-  "realisedPnl": 500,
-  "unrealisedPnl": 250,
-  "exposure": 80000,
-  "openPositions": 1,
-  "closedPositions": 0,
-  "positions": [
-    {
-      "positionId": "POS-0001",
-      "strategyId": "EMA_TREND",
       "segment": "NSE_CASH",
       "symbolToken": "2885",
-      "direction": "LONG",
-      "quantity": 100,
-      "closedQuantity": 0,
-      "remainingQuantity": 100,
-      "averageEntryPrice": 800.25,
-      "stopPrice": 780.50,
-      "targetPrice": 830.00,
-      "lastPrice": 802.75,
-      "realisedPnl": 0,
-      "status": "OPEN",
-      "openedAt": "2026-11-18T09:30:01Z",
-      "updatedAt": "2026-11-18T10:00:00Z",
-      "closedAt": null
+      "status": "FRESH",
+      "session": "OPEN",
+      "lastTickAt": "2026-11-19T09:29:55Z",
+      "lastCandleAt": "2026-11-19T09:25:00Z",
+      "candleInterval": "FIVE_MINUTE",
+      "tickAgeSeconds": 5,
+      "candleAgeSeconds": 300,
+      "latestPrice": 2500.50
     }
   ]
 }
 ```
 
----
+`status` is `FRESH`, `STALE` or `UNKNOWN`. `session` is `OPEN`, `CLOSED` or
+`UNKNOWN`; it uses the configured exchange calendar, including holidays and
+special sessions.
 
-## History
+### `GET /api/v1/options/assessments`
 
-| Method | Path | Access | Purpose |
-|---|---|---|---|
-| `GET` | `/api/v1/history/orders` | USER | Paged own order history |
-| `GET` | `/api/v1/history/trades` | USER | Paged own closed trades |
-| `GET` | `/api/v1/history/portfolio` | USER | Paged portfolio snapshots |
-| `GET` | `/api/v1/admin/orders` | ADMIN | All orders |
-| `GET` | `/api/v1/admin/history/trades` | ADMIN | All trades |
-| `GET` | `/api/v1/admin/history/portfolio` | ADMIN | All portfolio snapshots |
+Options assessment fields include spot instrument and underlying, chain counts,
+ATM implied volatility and its rank/percentile, skew, net Greeks, open interest
+and volume totals, concentration strikes, support/resistance zones, put/call
+ratios, expected move, liquidity, max pain, session phase, diagnostics and a
+summary.
 
-Trade data includes `tradeKey`, `orderId`, `positionId`, strategy, direction,
-filled quantity, average entry, closed quantity, realised P&L, and open/close
-timestamps. History is durable in MongoDB; engine portfolio state itself is not
-restored from it.
+### `GET /api/v1/strategy/definitions`
 
----
+Returns immutable strategy definitions. The list is empty when the broker-backed
+pipeline is not running.
 
-## Analysis read model
+### `GET /api/v1/strategy/evaluations`
 
-These endpoints project the latest engine assessments. They are read-only and
-never trigger analysis. If the engine has not produced an assessment, the lists
-are empty; `engineAvailable` states whether the execution engine is registered.
+Returns each strategy's status, summary and rule outcomes. Evaluations describe
+whether conditions hold; they are not buy/sell recommendations.
 
-| Method | Path | Purpose |
+### `GET /api/v1/risk/assessments` and `/api/v1/risk/qualifications`
+
+Risk assessments describe stop distance, risk budget, size, exposure, leverage,
+reward-to-risk and policy outcomes. Qualifications describe whether a strategy
+evaluation is eligible for downstream consideration. Neither approves or places
+a trade.
+
+## Monitoring (read-only)
+
+Monitoring endpoints exist only when the broker live pipeline is enabled. They
+expose trades recorded manually through the application service and never place,
+modify or close an order.
+
+### `GET /api/v1/monitoring/active`
+
+Returns active manual trades with their latest monitoring result. Each item has
+`trade` and `latestResult`. A trade recorded before its first evaluation has an
+empty `latestResult`.
+
+### `GET /api/v1/monitoring/history?tradeId=&limit=`
+
+Returns newest-first significant monitoring transitions. `tradeId` is optional;
+`limit` defaults to `50` and is clamped by the store. Each entry contains previous
+and current state, previous and current exit recommendation, previous and current
+confidence, previous and current directional edge, the explanation and warnings.
+
+### `GET /api/v1/monitoring/{tradeId}`
+
+Returns one manual trade and its latest result. An unknown trade returns the
+standard `RESOURCE_NOT_FOUND` envelope.
+
+### `GET /api/v1/monitoring/alerts?limit=`
+
+Returns newest-first persisted monitoring alerts, including state changes, exit
+recommendation changes, stale data, qualification loss, confidence/edge
+deterioration and lifecycle alerts.
+
+`monitoringState` is one of `HEALTHY`, `WEAKENING`, `AT_RISK`,
+`EXIT_RECOMMENDED` or `INVALIDATED`. `exitRecommendation` is one of `HOLD`,
+`WATCH_CLOSELY`, `PREPARE_EXIT` or `EXIT_NOW`. These are recommendations only;
+there is no execution endpoint and no automatic exit.
+
+## Watchlists
+
+### `POST /api/v1/watchlists`
+
+```json
+{ "name": "Momentum" }
+```
+
+`201 Created` with the watchlist. Duplicate names return `409`.
+
+### `POST /api/v1/watchlists/{id}/items`
+
+```json
+{
+  "symbolToken": "2885",
+  "symbol": "RELIANCE",
+  "segment": "NSE_CASH"
+}
+```
+
+A watchlist item change schedules the live subscription supervisor to reconcile
+its instrument set. Supported feed segments are `NSE_CASH`, `NSE_FO`, `BSE_CASH`,
+`BSE_FO` and `MCX_FO`. The server caps the total monitored set.
+
+## Settings and notifications
+
+`PUT /api/v1/settings/preferences` accepts theme, default interval, default
+strategy id and notification switches. `PUT /api/v1/settings/application` accepts
+maintenance mode, maximum watchlist items (`1..100`) and history retention days
+(`30..3650`).
+
+Notifications are in-app records owned by the local principal. There is no push
+transport, WebSocket or background polling in the client.
+
+## Live data configuration
+
+The live supervisor is enabled only with `SMARTAPI_ENABLED=true` and valid
+read-only broker credentials. Its configured baseline and every watchlist item
+form the monitored set. Readable aliases such as `NSE_CASH:NIFTY`,
+`NSE_CASH:BANKNIFTY` and `NSE_FO:NIFTY` are resolved from the instrument master;
+numeric tokens pass through directly. Alias resolution never selects an option
+contract.
+
+Relevant environment variables:
+
+| Variable | Default | Purpose |
 |---|---|---|
-| `GET` | `/api/v1/market/overview?limit=25` | All five latest collections |
-| `GET` | `/api/v1/market/assessments?limit=25` | Market intelligence |
-| `GET` | `/api/v1/options/assessments?limit=25` | Option chain analytics |
-| `GET` | `/api/v1/strategy/evaluations?limit=25` | Strategy evaluations |
-| `GET` | `/api/v1/strategy/definitions` | Registered strategy metadata |
-| `GET` | `/api/v1/risk/assessments?limit=25` | Risk assessments |
-| `GET` | `/api/v1/risk/qualifications?limit=25` | Trade qualifications |
+| `LIVE_MARKET_INSTRUMENTS` | `NSE_CASH:2885,NSE_CASH:NIFTY,NSE_CASH:BANKNIFTY,NSE_FO:NIFTY` | Baseline subscriptions |
+| `LIVE_MARKET_INCLUDE_WATCHLISTS` | `true` | Include watchlist instruments |
+| `LIVE_MARKET_MAX_INSTRUMENTS` | `200` | Hard cap |
+| `LIVE_MARKET_RECONCILE_INTERVAL_MS` | `15000` | Safety-net reconciliation |
+| `LIVE_TICK_MAX_AGE` | `2m` | Tick freshness threshold |
+| `LIVE_CANDLE_MAX_AGE` | `10m` | Candle freshness threshold |
+| `NSE_HOLIDAYS`, `BSE_HOLIDAYS`, `MCX_HOLIDAYS` | empty | Comma-separated ISO holiday dates |
 
-`limit` defaults to 25 and is clamped to 100 by the API. The in-memory store
-keeps up to 128 entries per assessment type. The overview response:
-
-```json
-{
-  "generatedAt": "2026-11-18T09:30:00Z",
-  "engineAvailable": true,
-  "readModelEntries": 12,
-  "markets": [],
-  "options": [],
-  "strategies": [],
-  "risks": [],
-  "qualifications": []
-}
-```
-
-Each item is a direct projection of an immutable engine assessment. No API layer
-recalculates trend, Greeks, sizing, liquidity, qualification or risk.
-
----
-
-## Settings
-
-| Method | Path | Access | Purpose |
-|---|---|---|---|
-| `GET` | `/api/v1/settings/preferences` | USER | Read own preferences |
-| `PUT` | `/api/v1/settings/preferences` | USER | Replace own preferences |
-| `GET` | `/api/v1/settings/application` | USER | Read application settings |
-| `PUT` | `/api/v1/settings/application` | ADMIN | Update application settings |
-
-Preferences:
-
-```json
-{
-  "theme": "DARK",
-  "defaultInterval": "FIFTEEN_MINUTE",
-  "defaultStrategyId": "EMA_TREND",
-  "notificationsEnabled": true,
-  "orderNotifications": true,
-  "positionNotifications": true,
-  "loginAlerts": true,
-  "systemMessages": true
-}
-```
-
-Application settings update:
-
-```json
-{
-  "maintenanceMode": false,
-  "maximumWatchlistItems": 100,
-  "historyRetentionDays": 365
-}
-```
-
-`maximumWatchlistItems` is 1–100. `historyRetentionDays` is 30–3650.
-
----
-
-## Notifications
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/notifications?page=0&size=20` | Paged own notifications |
-| `GET` | `/api/v1/notifications/unread` | `{ "unread": 3 }` |
-| `PUT` | `/api/v1/notifications/{id}/read` | Mark one notification read |
-| `PUT` | `/api/v1/notifications/read-all` | Mark all read; returns unread count |
-
-Notifications are records persisted by the backend. Android creates local
-notification channels but the backend is the source of the notification feed;
-there is no push transport in Phase 12.
-
----
-
-## System and operations
-
-### `GET /api/v1/system/status` (public)
-
-```json
-{
-  "timestamp": "2026-11-18T09:30:00Z",
-  "status": "UP",
-  "database": "UP",
-  "engine": "AVAILABLE",
-  "version": "0.1.0",
-  "readModelEntries": 12,
-  "uptimeSeconds": 3600
-}
-```
-
-`status` is `DEGRADED` when MongoDB cannot be pinged. `engine` is `DISABLED`
-when broker credentials are absent. No credentials or connection details are
-returned.
-
-### Operational endpoints
-
-| Path | Exposure | Purpose |
-|---|---|---|
-| `/actuator/health` | public | Liveness/readiness aggregate |
-| `/actuator/info` | public | Build and application info |
-| `/actuator/metrics` | authenticated | Metrics |
-| `/actuator/prometheus` | prod, authenticated | Prometheus scrape |
-
-The base profile does not enable the MongoDB health indicator so the API can
-start without a database during development. Production enables it.
-
----
-
-## Example session
-
-```bash
-BASE=http://localhost:8080
-
-curl -s -X POST "$BASE/api/v1/auth/register" \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"trader@example.com","displayName":"Trader","password":"strong-password"}'
-
-TOKEN=$(curl -s -X POST "$BASE/api/v1/auth/login" \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"trader@example.com","password":"strong-password"}' \
-  | python -c 'import json,sys; print(json.load(sys.stdin)["data"]["accessToken"])')
-
-curl -s "$BASE/api/v1/portfolio" -H "Authorization: Bearer $TOKEN"
-curl -s "$BASE/api/v1/market/overview" -H "Authorization: Bearer $TOKEN"
-curl -s "$BASE/api/v1/orders?page=0&size=20" -H "Authorization: Bearer $TOKEN"
-```
-
-## Contract rules
-
-- JSON field names are camelCase.
-- Timestamps are ISO-8601 UTC instants.
-- Money and quantities are JSON numbers serialised from `BigDecimal`; clients
-  must not assume binary floating-point precision.
-- All account resources are scoped by the authenticated user id taken from the
-  JWT subject. A client-supplied id is never trusted for ownership.
-- Lists are ordered newest first unless the endpoint documents otherwise.
+Freshness thresholds and the market calendar are server-side policy. The API
+exposes outcomes, not thresholds.

@@ -4,7 +4,7 @@ Spring Boot 4.1.2 application backend for the Trading Assistant platform. Java 2
 
 This backend is maintained as an independent Git repository. The Android client lives in the separate repository under the workspace `frontend/` directory.
 
-Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain and application services used by every future module. Phase 4 adds the reusable technical-indicator engine that consumes market candles. Phase 5 adds the runtime market-processing infrastructure: candle aggregation, long-lived indicator sessions, immutable event publication, session lifecycle management and a market calendar. Phase 6 adds the market-intelligence engine, which describes trend, momentum, volatility, participation, structure and session context without producing signals. Phase 7 adds the option chain and options analytics engine, which describes the derivatives market — chain structure, Greeks, implied volatility, open interest, put/call ratios, max pain, expected move and liquidity — without producing signals. Phase 8 adds the strategy evaluation engine, which answers whether predefined strategy rules currently evaluate to true, without recommending, ranking or qualifying trades. Phase 9 adds the trade qualification engine, which decides whether a strategy evaluation is currently eligible for downstream consideration, without recommending, ranking, sizing or trading. Phase 10 adds the risk management and position sizing engine, which describes allowable risk boundaries — stop distance, risk budget, size, leverage and policy limits — without approving, recommending or placing anything. Phase 11 adds order management, portfolio and execution: an explicit caller intent is validated against thirteen rules, submitted through a broker abstraction, tracked through order and position lifecycles, and reflected in an in-memory portfolio. Phase 12 adds the application layer and Android client: JWT access and rotating refresh tokens, BCrypt accounts with USER/ADMIN roles, MongoDB persistence for users, watchlists, preferences, orders, trades, portfolio snapshots, notifications and settings, account-scoped REST APIs, an in-memory read model fed by engine events, maintenance jobs, OpenAPI, production observability and a 15-screen Kotlin/Jetpack Compose client. There is still no AI, ML, recommendation, backtesting, automated trading or live broker adapter. See [`docs/phase-12-report.md`](docs/phase-12-report.md).
+Phase 1 provides the operational backend foundation. Phase 2 adds a conditional, read-only Angel One SmartAPI integration behind a broker abstraction; it is disabled by default. Phase 3 adds the broker-independent market domain. Phase 4 adds sixteen technical indicators. Phase 5 adds candle aggregation, long-lived indicator sessions, immutable events, session lifecycle management and exchange calendars. Phase 6 adds market intelligence. Phase 7 adds option-chain and options analytics. Phase 8 adds deterministic strategy evaluation. Phase 9 adds trade qualification. Phase 10 adds risk and position sizing. Phase 11 contains a dormant execution model with no Spring beans and no API wiring. Phase 12 adds the single-owner application layer: MongoDB persistence for watchlists, preferences, notifications and settings, owner-scoped REST APIs, an in-memory read model fed by engine events, maintenance jobs, OpenAPI/observability and a seven-screen Kotlin/Jetpack Compose client. Phase 13 adds the live data foundation: watchlist-driven subscriptions, index/future aliases, all decision indicators, configurable holiday calendars and market-data freshness. Phase 14 adds the deterministic recommendation engine: explainable `BUY CALL`, `BUY PUT` or `NO TRADE` results from existing engine outputs, configurable scoring and option selection, and separate recommendation events. Phase 15 adds deterministic monitoring of manually recorded trades: event-driven rescoring, five monitoring states, four exit recommendations, persisted history/alerts and read-only monitoring APIs. Phase 16 adds instrument search, a recommendation read API with a reference entry/target/stop plan, manual fill registration/close and premium-level target/stop alerts; the Android client now has search, recommendation, fill and premium screens, and a fill is pinned to the recommendation timestamp the owner acted on. There is no AI, ML, backtesting, automated execution or order endpoint. See [`docs/phase-16-report.md`](docs/phase-16-report.md).
 
 ## Prerequisites
 
@@ -26,13 +26,12 @@ The Spring Boot Maven plugin produces an executable jar and a `META-INF/build-in
 ## Run locally
 
 The `local` profile is the default. It falls back to
-`mongodb://localhost:27017/trading_assistant` when `MONGODB_URI` is absent, and
-generates an ephemeral JWT key when `JWT_SECRET` is absent.
+`mongodb://localhost:27017/tradingassistant` when `MONGODB_URI` is absent. There
+is no login flow and no JWT secret to configure.
 
 ```bash
-# Optional overrides:
-export MONGODB_URI='mongodb://localhost:27017/trading_assistant'
-export JWT_SECRET="$(openssl rand -base64 32)"
+# Optional override:
+export MONGODB_URI='mongodb://localhost:27017/tradingassistant'
 mvn spring-boot:run
 ```
 
@@ -81,23 +80,21 @@ Important behavior:
 
 No `.env` file is required or read automatically. Supply environment variables through the shell, IDE run configuration, Render environment variables, or a deployment secret store. A populated `.env` file is never read by Spring Boot and must not be committed.
 
-Phase 12 environment variables:
+Application environment variables:
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `MONGODB_URI` | production | Connection string including `/trading_assistant` |
-| `JWT_SECRET` | production | Base64 HMAC key, at least 32 bytes |
-| `JWT_ISSUER` | no | Token issuer, default `trading-assistant` |
-| `JWT_ACCESS_TOKEN_TTL` | no | Default `15m` |
-| `JWT_REFRESH_TOKEN_TTL` | no | Default `30d` |
-| `BCRYPT_STRENGTH` | no | Default `12` |
-| `APP_ADMIN_EMAIL` / `APP_ADMIN_PASSWORD` | no | Optional first administrator |
+| `MONGODB_URI` | production | Connection string including `/tradingassistant` |
 | `CORS_ALLOWED_ORIGINS` | no | Comma-separated browser origins |
 | `PLATFORM_JOBS_ENABLED` | no | Maintenance scheduling, default `true` |
 | `TOKEN_CLEANUP_CRON` | no | Default hourly at `:15` UTC |
-| `PORTFOLIO_SNAPSHOT_CRON` | no | Default every 15 minutes UTC |
 | `NOTIFICATION_RETENTION_DAYS` | no | Default `30` |
 | `TOKEN_RETENTION_DAYS` | no | Default `7` |
+| `LIVE_MARKET_INSTRUMENTS` | no | Baseline tokens/aliases |
+| `LIVE_MARKET_INCLUDE_WATCHLISTS` | no | Default `true` |
+| `LIVE_MARKET_MAX_INSTRUMENTS` | no | Default `200` |
+| `LIVE_TICK_MAX_AGE` / `LIVE_CANDLE_MAX_AGE` | no | Freshness thresholds |
+| `NSE_HOLIDAYS` / `BSE_HOLIDAYS` / `MCX_HOLIDAYS` | no | ISO holiday dates |
 
 See [`docs/deployment.md`](docs/deployment.md) and [`docs/mongodb.md`](docs/mongodb.md).
 
@@ -210,7 +207,7 @@ com.tradingassistant
 ├── platform
 │   ├── api           Controllers, request/response DTOs, pages and OpenAPI
 │   ├── config        Mongo timeouts, index initializer, event bridge, scheduling
-│   ├── security      JWT, refresh tokens, BCrypt, filter and error handling
+│   ├── security      Fixed local principal, CORS, and retained legacy auth types
 │   ├── user          Accounts, roles, status and bootstrap admin
 │   ├── watchlist     Per-account watchlists
 │   ├── preferences   Theme, interval and notification preferences
@@ -438,7 +435,9 @@ Phase 10 describes the risk boundaries of a qualified trade: how far a volatilit
 
 The full architecture, domain model, rule semantics, engine design, configuration, validation and testing report is in [`docs/phase-10-report.md`](docs/phase-10-report.md).
 
-## Order management, portfolio and execution (Phase 11)
+## Order management, portfolio and execution (Phase 11, dormant)
+
+Phase 11 contains an execution model, but it is **dormant**: no Spring bean, controller, live-supervisor call site or broker order adapter wires it into the running application. The current product never places an order. The description below records the module's design, not an available feature.
 
 Phase 11 converts a qualified, risk-assessed trade into an executable lifecycle **only when a caller explicitly supplies a direction**. The risk assessment provides the quantity and protective stop; `OrderIntent` provides the side, order type, prices and time in force. Execution never infers a side and never sizes beyond the assessment.
 
@@ -456,27 +455,86 @@ Phase 11 converts a qualified, risk-assessed trade into an executable lifecycle 
 
 The full architecture, domain model, order engine, broker integration, portfolio, position lifecycle, event integration, validation, configuration, performance and testing report is in [`docs/phase-11-report.md`](docs/phase-11-report.md).
 
-## Application layer and Android client (Phase 12)
+## Application layer and Android client (Phase 12+)
 
-Phase 12 adds the multi-user application without changing the engine calculations.
+Phase 12 adds the single-owner application without changing the engine calculations.
 
-- `platform.security`: stateless JWT access tokens, opaque SHA-256-hashed refresh tokens with atomic rotation, BCrypt cost 12, USER/ADMIN roles, CORS and safe authentication errors. Production refuses to start without `JWT_SECRET`.
-- `platform.api`: 50 account-scoped routes under `/api/v1` for auth, users, watchlists, orders, portfolio, positions, history, market, options, strategy, risk, settings, notifications, system and admin history.
-- `platform.history`: MongoDB records for `orders`, `trades` and `portfolio_snapshots`; `executionapp` provides the order use case, live-or-snapshot portfolio query and an `ObjectProvider` gateway to the optional engine.
+- `platform.security`: a fixed local principal (`local-owner`) is installed for every request. There is no registration, login, JWT, refresh token or account role flow. The security boundary is the single deployment owner, not a multi-user account system.
+- `platform.api`: read-only market, options, strategy and risk projections; watchlists; preferences; application settings; notifications; and operational status under `/api/v1`.
 - `platform.readmodel`: `PipelineSnapshotStore` listens to the existing event bus and keeps the latest 128 market/options/strategy/risk/qualification descriptions. Analysis endpoints project those descriptions; they never recalculate them and never write engine caches to MongoDB.
-- `platform.notification`, `user`, `watchlist`, `preferences`, `settings`: durable account features. Nine collections live on the `trading_assistant` database.
-- `platform.jobs`: token cleanup, notification retention, portfolio snapshots and read-model trimming. No job places or modifies a trade.
-- Android: `frontend/` contains a Kotlin/Jetpack Compose client with Hilt, Retrofit, StateFlow, Material 3, a dark-only theme, 15 screens and local notification channels. It is a renderer of backend values, not a second calculation engine.
+- `platform.notification`, `watchlist`, `preferences`, `settings`: durable owner records. Nine collection definitions remain on the `tradingassistant` database; the dormant orders/trades records are not exposed by any API.
+- `platform.jobs`: token cleanup, notification retention and read-model trimming. No job places, modifies or executes a trade.
+- Android: `frontend/` contains a Kotlin/Jetpack Compose client with Hilt, Retrofit, StateFlow, Material 3, a dark-only theme and seven screens. It is a renderer of backend values, not a second calculation engine.
 
 Important operational notes:
 
-- The engine beans exist only when the broker is enabled. Without them, order routes return `503 ENGINE_UNAVAILABLE`; portfolio responses fall back to the latest snapshot (`SNAPSHOT`) or `UNAVAILABLE`.
-- `MONGODB_URI` is the only production database configuration. The requested database name is `trading_assistant`; never use `boom`.
+- The engine beans exist only when the broker is enabled. Without them, `/api/v1/system/status` reports `DISABLED` and analysis lists are empty.
+- `MONGODB_URI` is the only production database configuration. The database name is `tradingassistant`; never use `boom`.
 - The analysis read model is in memory and rebuilt after restart; it is not history.
-- The portfolio is the single engine/house account, not a per-user aggregate. Do not treat the current implementation as a multi-tenant portfolio service.
-- `runtime` limits, dual-write and security gaps are documented in [`docs/architecture-review.md`](docs/architecture-review.md).
+- There is no order, trade, portfolio, position, holding or funds endpoint. Phase 11 execution code is dormant and the source guardrails reject wiring it into the live or HTTP application.
+- `runtime` limits and historical architecture findings are documented in [`docs/architecture-review.md`](docs/architecture-review.md).
 
-See the [Phase 12 report](docs/phase-12-report.md) for the full delivery and verification record.
+See the [Phase 12 report](docs/phase-12-report.md) for the earlier delivery record and the [Phase 13 report](docs/phase-13-report.md) for the current data foundation.
+
+## Live data foundation (Phase 13)
+
+Phase 13 makes the read-only live stream watchlist-driven and decision-ready.
+
+- `LiveSubscriptionPlanner` builds one deterministic set from configured instruments and every watchlist item, collapses duplicates, rejects segments without a documented feed and enforces a hard cap.
+- `LiveInstrumentResolver` resolves readable aliases from the instrument master with a TTL cache. Numeric tokens bypass the master. Index aliases prefer the index; derivative aliases select the nearest non-expired future and never guess an option.
+- `LiveMarketRunner` reconciles on startup, on `WatchlistChangedEvent` and on a configurable interval. Added instruments are subscribed and seeded with history; removed instruments release pipeline, strategy, intelligence and options state. A generation guard ignores callbacks from a closed feed.
+- `LiveIndicators` configures all sixteen indicators: SMA, EMA, WMA, RSI, MACD, Stochastic RSI, ATR, Bollinger, Keltner, Donchian, ADX, DMI, VWAP, OBV, CMF and Supertrend.
+- The market calendar accepts comma-separated ISO NSE/BSE/MCX holidays through configuration; invalid dates fail startup explicitly.
+- `LiveOptionChainService` stages the nearest-expiry, closest-strike option chain for each monitored cash/index instrument from the instrument master and batched `FULL` quotes, then hands it to the existing `InMemoryOptionChainProvider`. It is read-only and refresh-throttled.
+- `AngelOneHttpClient` classifies SmartAPI's plain-text 403 "exceeding access rate" response as a retryable rate limit; historical warm-up uses a slower bounded retry policy.
+- `MarketDataFreshnessService` observes ticks and completed candles in a bounded map and exposes `FRESH`/`STALE`/`UNKNOWN` plus `OPEN`/`CLOSED`/`UNKNOWN` at `GET /api/v1/market/freshness`.
+- `ArchitectureGuardrailTest` rejects AI/ML dependencies and markers, randomness/wall-clock calls in engine packages, execution imports in the live/API layer and any order/portfolio endpoint.
+
+Configuration is documented in [`.env.example`](.env.example) and the [API reference](docs/api-reference.md). The database name is `tradingassistant` in the local fallback, environment example and current documentation.
+
+## Recommendation engine (Phase 14)
+
+Phase 14 adds a deterministic recommendation layer above the existing engines.
+
+- `RecommendationContext` freezes already-computed market, indicator, options, strategy, qualification and risk outputs for one instrument and timestamp.
+- Twenty-one independent scorers return a bounded score, explanation and diagnostics. The configured weights are relative and normalized, so no hardcoded total or confidence percentage exists.
+- `RecommendationEngine` applies qualification, risk, options, session, directional-edge and confidence gates, then selects only `BUY_CALL`, `BUY_PUT` or `NO_TRADE`.
+- `OptionSelector` reads the captured chain and the configured weekly/monthly, nearest/next/far and ATM/ITM/OTM policy. It emits expiry, strike and moneyness only; it does not emit entry, target, stop, exit, quantity or position size.
+- `RecommendationBatch.ranked()` provides deterministic internal ranking by confidence, weighted score, type and instrument.
+- `RecommendationService` stages existing events and publishes `RecommendationGeneratedEvent`, `RecommendationUpdatedEvent` and `RecommendationExpiredEvent` on a separate hierarchy. The sealed `MarketEvent` contract is unchanged.
+- `app.recommendation` configures every weight, the minimum confidence, directional edge, PCR/IV bands, allowed expiries and strike policy. Invalid, missing, duplicate or negative configuration is rejected at startup.
+- `ArchitectureGuardrailTest` rejects AI/ML, execution, broker, Android and HTTP dependencies in the recommendation package and rejects indicator/analytics recalculation.
+
+Phase 16 exposes the recommendation through `GET /api/v1/recommendations`; no Android recommendation UI exists yet. The live service waits for the options stage and chain for the exact market timestamp rather than inventing a contract; if the chain is unavailable, no recommendation is published. The recommendation itself still contains no entry, target, stop, exit, quantity or position size; the separate read-side plan derives reference boundaries from the existing risk stop and chain.
+
+## Trade monitoring (Phase 15)
+
+Phase 15 adds continuous deterministic monitoring above the recommendation layer.
+
+- `ManualTrade` records an option trade the owner executed outside the application. It contains local identity, instrument, contract, entry economics and `ACTIVE`/`CLOSED` status only; it has no broker order id, execution state, stop, target or automation field.
+- `TradeMonitoringContext` joins the active trade, current recommendation, market assessment, indicators, options assessment, strategy, qualification, risk and freshness. Inputs come from `RecommendationService.latestContext(...)`; monitoring never recalculates indicators, options analytics or recommendations.
+- `TradeMonitoringEngine` reuses every Phase 14 component score and computes current confidence, trade-aligned directional edge, previous values, deltas, component changes, warnings, an explanation and diagnostics.
+- States are `HEALTHY`, `WEAKENING`, `AT_RISK`, `EXIT_RECOMMENDED` and `INVALIDATED`. Exit recommendations are `HOLD`, `WATCH_CLOSELY`, `PREPARE_EXIT` and `EXIT_NOW`; these are recommendations only and never execute.
+- `MonitoringService` rescans active trades on completed candles, input updates and recommendation updates. Repeated identical results are not persisted and do not emit duplicate events.
+- Mongo stores `manual_trades`, the latest `monitoring_results`, significant `monitoring_history` and `monitoring_alerts`.
+- `MonitoringStartedEvent`, `MonitoringUpdatedEvent`, `MonitoringStateChangedEvent`, `MonitoringWarningEvent`, `ExitRecommendedEvent` and `MonitoringStoppedEvent` form a separate hierarchy; the sealed `MarketEvent` contract is unchanged.
+- Read-only endpoints are `GET /api/v1/monitoring/active`, `/history`, `/{tradeId}` and `/alerts`. Phase 15 has no POST/PUT/PATCH/DELETE; Phase 16 adds manual fill and premium-status APIs outside the monitoring package, but still no execution or broker-order endpoint. There is no Android implementation.
+- `app.monitoring` configures warning/exit confidence, confidence/edge/component deterioration, warning/at-risk component counts, strategy disagreement, maximum stale duration and the event-driven interval.
+- `ArchitectureGuardrailTest` rejects execution/broker/Android/HTTP-client dependencies, indicator/options/risk/recommendation recalculation, write endpoints, randomness and clock use in the deterministic monitoring core.
+
+Manual trade recording was available through `MonitoringService.register(...)` for the application/future UI layer in Phase 15. Phase 16 exposes the write path.
+
+## Actionable workflow (Phase 16)
+
+Phase 16 connects search, recommendation, manual execution and premium monitoring without adding an order path.
+
+- `InstrumentCatalog` caches the instrument master for ten minutes; `InstrumentSearchService` returns cash/index instruments by default and option/future instruments when explicitly requested.
+- `RecommendationQueryService` exposes the current recommendation and derives an optional `TradePlan` from the selected chain leg, the existing ATR stop, ATM delta, risk capital and reward/risk policy. The plan is labelled with its delta source and never becomes an order.
+- `ManualTrade` now stores optional `targetPremium`/`stopPremium`, so a later recommendation cannot move the owner's recorded boundaries.
+- `POST /api/v1/monitoring/trades` records a manually executed fill. `POST /api/v1/monitoring/trades/{tradeId}/close` closes local monitoring only.
+- `OptionPremiumService` polls active option contracts in bounded batches, compares LTP with target/stop/expiry and raises a persisted `TRADE_ALERT` notification once per boundary. It skips alerts outside market hours and never exits automatically.
+- `GET /api/v1/instruments/search`, `GET /api/v1/recommendations`, `GET /api/v1/monitoring/premium` and `GET /api/v1/monitoring/premium/{tradeId}` are read endpoints. The Android client does not consume them yet.
+- `app.trade-plan` configures fallback delta, fallback percentages, premium polling and alert enablement.
 
 ## Security notes
 
@@ -487,15 +545,14 @@ See the [Phase 12 report](docs/phase-12-report.md) for the full delivery and ver
 - User-supplied request IDs are accepted only if they match `[A-Za-z0-9._-]{1,64}`; otherwise the server generates a UUID.
 - The Docker runtime uses an unprivileged user.
 - Actuator exposure is restricted to health, info, metrics and (production) Prometheus; health details are disabled.
-- JWT secrets and MongoDB credentials come only from the environment. No token, password or connection string is logged or returned.
-- The production profile fails startup when `JWT_SECRET` is absent or shorter than 256 bits.
-- Refresh tokens are stored only as SHA-256 hashes and rotate on every use.
+- MongoDB credentials come only from the environment. No connection string is logged or returned.
+- There is no login or token surface to harden in the single-owner application; network access control is the deployment boundary.
 - The global exception handler returns safe messages and logs unexpected failures server-side.
-- See [`docs/architecture-review.md`](docs/architecture-review.md) for unresolved security hardening items (MFA, rate limiting, audit logging and global portfolio visibility).
+- See [`docs/architecture-review.md`](docs/architecture-review.md) for historical security findings; it predates the single-owner correction.
 
 ## Testing
 
-`mvn -B -ntp verify` currently runs **1,072 tests with 0 failures and 2 skipped** (the two opt-in live broker tests). Phase 12 contributes 166 tests under `com.tradingassistant.platform`: 108 unit, 40 controller and 18 HTTP/Mongo integration tests. The existing 906 engine and system tests remain green.
+`mvn -B -ntp test` currently runs **1,146 tests with 0 failures, 0 errors and 2 skipped** (the two opt-in live broker tests). Phase 15 adds monitoring engine/state/exit/delta tests, validation and stale-data tests, service lifecycle/history/event tests, persistence document/store coverage, read-only API tests, configuration and Spring wiring tests, and extended source guardrails; Phase 16 adds instrument-catalog/search, trade-plan, manual-trade command, premium-monitor, property-binding and route-level API tests plus a workflow execution guardrail; the existing engine, broker and platform tests remain green. The live option-chain staging and plain-text 403 retry paths add their own focused tests.
 
 Coverage includes:
 
@@ -521,7 +578,11 @@ Coverage includes:
 - Phase 9 qualification success, failure, partial and insufficient outcomes, unknown states, duplicate suppression, every built-in rule, confidence and participation floors, session and option-liquidity rules, option freshness and session alignment, timestamp and instrument mismatches, registry operations, parallel determinism, immutability, event publication, staging order, configuration and wiring
 - Phase 10 stop and size derivation, volatility adjustment, fractional and whole-unit quantities, instrument overrides, every built-in risk rule, within-limit, breach, partial and insufficient outcomes, fail-fast containment, parallel determinism, immutable models, registry operations, configuration validation, staging order, aligned option and indicator filtering, event publication and Spring wiring
 - Phase 11 order creation, validation and every rejection path, the forward-only order state machine, order store eviction and duplicate detection, the paper broker (fills, partial fills, rejections, retries, cancellation), broker and rule registries, portfolio margins, realised and unrealised P&L, position open/add/partial close/close arithmetic, the engine lifecycle and event order, cancellation rules, bounded service caches, marks, immutability, configuration, concurrency and Spring wiring
-- Phase 12 registration/login/refresh rotation, JWT expiry and production-secret rules, BCrypt accounts, role authorization, watchlist ownership and limits, order placement/cancellation use cases, portfolio live/snapshot fallback, history services and event listeners, notification preferences and records, application settings, read-model projection, maintenance jobs, all controller contracts, the full Spring security chain and Mongo-compatible repository integration
+- Legacy auth-service/JWT unit tests retained for the dormant security types; single-owner watchlist ownership and limits; analysis controller contracts; notification preferences and records; application settings; read-model projection; maintenance jobs; the local-principal Spring security chain and Mongo-compatible repository integration
+- Phase 13 alias resolution, deterministic subscription planning, supervisor reconciliation and cleanup, all-indicator wiring, holiday configuration, freshness status/session projection, and source-level AI/execution guardrails
+- Phase 14 every scorer and its explanation/diagnostics, weighted contribution and confidence arithmetic, deterministic ranking, BUY CALL/BUY PUT/NO TRADE decisions, stale/missing/misaligned input rejection, option expiry/strike selection, weight/threshold configuration and binding, generated/updated/expired event staging, and recommendation-specific source guardrails
+- Phase 15 manual trade validation, every monitoring state transition, confidence/edge/component deltas, qualification/risk/session/trend/structure/liquidity deterioration, BUY CALL/BUY PUT monitoring, stale-context retention, duplicate-scan suppression, history and alert persistence through the store port, monitoring events, read-only API projections, configuration binding/validation, Spring wiring and deterministic-core guardrails
+- Phase 16 cached instrument search and option resolution, search default filtering, ATR/ATM-delta trade-plan derivation, plan quantities and boundaries, manual fill registration/close, premium target/stop alerts, duplicate/closed-session suppression, trade-plan property binding, route-level API contracts and a no-execution workflow guardrail
 
 The separate Android repository has 21 JVM tests (API contract, login/register, dashboard, orders, watchlist and settings view models) and three compiled Compose UI tests. Android instrumented tests require an emulator and are not part of this backend build.
 
@@ -538,4 +599,4 @@ mvn -Dtest=AngelOneLiveIntegrationTest test
 
 The Phase 2 test verifies authentication, profile, live quote, historical candles, instrument master, WebSocket connection and graceful close. The Phase 3 test maps the real instrument master and option contracts into the domain. Both were run successfully against a real account and never print credentials or tokens. The request-metadata headers are mandatory; without them SmartAPI rejects login with `AB1012` (documented as “Invalid Product Type”).
 
-Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md); Phase 7 results are in [`docs/phase-7-report.md`](docs/phase-7-report.md); Phase 8 results are in [`docs/phase-8-report.md`](docs/phase-8-report.md); Phase 9 results are in [`docs/phase-9-report.md`](docs/phase-9-report.md); Phase 10 results are in [`docs/phase-10-report.md`](docs/phase-10-report.md); Phase 11 results are in [`docs/phase-11-report.md`](docs/phase-11-report.md); Phase 12 results are in [`docs/phase-12-report.md`](docs/phase-12-report.md). The full API contract is [`docs/api-reference.md`](docs/api-reference.md), deployment is [`docs/deployment.md`](docs/deployment.md), MongoDB is [`docs/mongodb.md`](docs/mongodb.md), and the 20-section review is [`docs/architecture-review.md`](docs/architecture-review.md).
+Phase 1 results are in [`docs/phase-1-report.md`](docs/phase-1-report.md); Phase 2 results are in [`docs/phase-2-report.md`](docs/phase-2-report.md); Phase 3 results are in [`docs/phase-3-report.md`](docs/phase-3-report.md); Phase 4 results are in [`docs/phase-4-report.md`](docs/phase-4-report.md); Phase 5 results are in [`docs/phase-5-report.md`](docs/phase-5-report.md); Phase 6 results are in [`docs/phase-6-report.md`](docs/phase-6-report.md); Phase 7 results are in [`docs/phase-7-report.md`](docs/phase-7-report.md); Phase 8 results are in [`docs/phase-8-report.md`](docs/phase-8-report.md); Phase 9 results are in [`docs/phase-9-report.md`](docs/phase-9-report.md); Phase 10 results are in [`docs/phase-10-report.md`](docs/phase-10-report.md); Phase 11 results are in [`docs/phase-11-report.md`](docs/phase-11-report.md); Phase 12 results are in [`docs/phase-12-report.md`](docs/phase-12-report.md); Phase 13 results are in [`docs/phase-13-report.md`](docs/phase-13-report.md); Phase 14 results are in [`docs/phase-14-report.md`](docs/phase-14-report.md); Phase 15 results are in [`docs/phase-15-report.md`](docs/phase-15-report.md). The full API contract is [`docs/api-reference.md`](docs/api-reference.md), deployment is [`docs/deployment.md`](docs/deployment.md), MongoDB is [`docs/mongodb.md`](docs/mongodb.md), and the 20-section review is [`docs/architecture-review.md`](docs/architecture-review.md).

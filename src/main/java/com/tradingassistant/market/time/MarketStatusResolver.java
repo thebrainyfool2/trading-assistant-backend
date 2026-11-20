@@ -15,8 +15,10 @@ import java.util.Objects;
  * The single application policy for Indian market time.
  *
  * <p>All domain timestamps are UTC {@link Instant}s. SmartAPI's unzoned candle
- * request times are interpreted in {@link #MARKET_ZONE}. The session windows are
- * weekday assumptions and deliberately do not claim holiday awareness.</p>
+ * request times are interpreted in {@link #MARKET_ZONE}. This resolver keeps its
+ * original weekday-only quote-status contract; holiday-aware sessions belong to
+ * {@code pipeline.calendar.MarketCalendar} and are used by the live supervisor
+ * and the market-data freshness projection.</p>
  */
 public final class MarketStatusResolver {
 
@@ -39,8 +41,8 @@ public final class MarketStatusResolver {
 
     /**
      * Resolves the session state for an instant. A null timestamp is explicitly
-     * unknown. Weekends are closed; exchange holidays are not modelled in Phase
-     * 3, so a weekday holiday will appear as a normal session.
+     * unknown. Weekends are closed. Exchange holidays are intentionally not
+     * modelled here; use {@code MarketCalendar} for holiday-aware sessions.
      */
     public MarketStatus resolve(Instant timestamp) {
         if (timestamp == null) {

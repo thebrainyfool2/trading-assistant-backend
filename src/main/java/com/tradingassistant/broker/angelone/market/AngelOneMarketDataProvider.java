@@ -148,7 +148,7 @@ public class AngelOneMarketDataProvider implements MarketDataProvider {
                 dto,
                 CANDLE_ENVELOPE,
                 sessionManager.accessToken(),
-                RetryPolicy.safe(properties)));
+                RetryPolicy.history()));
         if (response.data() == null) {
             throw new BrokerInvalidResponseException("The candle response contained no data.");
         }

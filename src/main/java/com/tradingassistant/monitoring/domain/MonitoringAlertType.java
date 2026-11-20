@@ -1,0 +1,22 @@
+package com.tradingassistant.monitoring.domain;
+
+/** Stable categories for monitoring warnings and read-only alert history. */
+public enum MonitoringAlertType {
+    MONITORING_STARTED,
+    MONITORING_STOPPED,
+    STATE_CHANGED,
+    EXIT_RECOMMENDATION_CHANGED,
+    THESIS_INVALIDATED,
+    QUALIFICATION_LOST,
+    RISK_DETERIORATION,
+    STALE_DATA,
+    SESSION_CLOSED,
+    CONFIDENCE_DETERIORATION,
+    DIRECTIONAL_EDGE_DETERIORATION,
+    COMPONENT_DETERIORATION,
+    TREND_REVERSAL,
+    STRUCTURE_REVERSAL,
+    LIQUIDITY_DETERIORATION,
+    STRATEGY_DISAGREEMENT,
+    INVALID_CONTEXT
+}

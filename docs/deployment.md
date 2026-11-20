@@ -1,8 +1,8 @@
 # Deployment Guide
 
-This guide covers the Phase 12 backend. Nothing in this document has been
-executed against a production environment by the implementation work; the
-commands are the repeatable deployment procedure.
+This guide covers the single-owner Phase 13 backend. Nothing in this document
+has been executed against a production environment by the implementation work;
+the commands are the repeatable deployment procedure.
 
 ## 1. Prerequisites
 
@@ -10,21 +10,22 @@ commands are the repeatable deployment procedure.
 - Maven 3.9.16+
 - A MongoDB Atlas cluster (or another MongoDB 6+ deployment)
 - A Render account, or Docker for another host
-- Broker credentials only if the trading engine should run
+- Read-only broker credentials only if live market data should run
 
-The API can start without broker credentials. Market analysis, order placement
-and live positions then report `ENGINE_UNAVAILABLE`/`DISABLED`; accounts,
-watchlists, preferences, settings, notifications and history still work.
+The API starts without broker credentials. Analysis lists are then empty,
+`/api/v1/system/status` reports the engine as `DISABLED`, and watchlists,
+preferences and notifications still work. The application has no order,
+portfolio, position or funds endpoint.
 
 ## 2. MongoDB
 
 Create a database user with read/write access to one database. The database must
-be named `trading_assistant`.
+be named `tradingassistant`.
 
 Atlas connection string:
 
 ```text
-mongodb+srv://<user>:<password>@<cluster-host>/trading_assistant?retryWrites=true&w=majority
+mongodb+srv://<user>:<password>@<cluster-host>/tradingassistant?retryWrites=true&w=majority
 ```
 
 - Do not use the `boom` database.
@@ -34,204 +35,108 @@ mongodb+srv://<user>:<password>@<cluster-host>/trading_assistant?retryWrites=tru
 - The driver uses a 5-second server-selection timeout and a 10-second socket read
   timeout, so an outage fails promptly instead of exhausting request threads.
 
-The URI is read from `MONGODB_URI` in every profile. The local profile alone has a
-credential-free `mongodb://localhost:27017/trading_assistant` fallback. If the
+The URI is read from `MONGODB_URI` in every profile. The local profile alone has
+a credential-free `mongodb://localhost:27017/tradingassistant` fallback. If the
 URI omits a database name, MongoDB defaults to `test`; always include
-`/trading_assistant`.
+`/tradingassistant`.
 
 Indexes are created idempotently at startup. If MongoDB is unreachable at boot,
-startup continues, index creation is skipped with a warning, and `/api/v1/system/status`
-reports `DEGRADED` until the database is reachable. See
+startup continues, index creation is skipped with a warning, and
+`/api/v1/system/status` reports `DEGRADED` until the database is reachable. See
 [mongodb.md](mongodb.md).
 
 ## 3. Required environment
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `MONGODB_URI` | yes | local fallback only | Must include `/trading_assistant` |
-| `JWT_SECRET` | production | empty | Base64-encoded 32+ byte HMAC key |
-| `JWT_ISSUER` | no | `trading-assistant` | Written to and validated from tokens |
-| `JWT_ACCESS_TOKEN_TTL` | no | `15m` | Access-token lifetime |
-| `JWT_REFRESH_TOKEN_TTL` | no | `30d` | Opaque refresh-token lifetime |
-| `BCRYPT_STRENGTH` | no | `12` | 4–31 |
-| `APP_ADMIN_EMAIL` | no | empty | Optional bootstrap admin |
-| `APP_ADMIN_PASSWORD` | no | empty | Required with the email; store as a secret |
+| `MONGODB_URI` | yes | local fallback only | Must include `/tradingassistant` |
 | `CORS_ALLOWED_ORIGINS` | no | empty | Comma-separated browser origins |
 | `SPRING_PROFILES_ACTIVE` | production | `local` | Set to `prod` in deployment |
-| `PORT` | Render | `10000` in prod | Render supplies this |
-| `PLATFORM_JOBS_ENABLED` | no | `true` | Maintenance jobs only |
-| `TOKEN_CLEANUP_CRON` | no | `0 15 * * * *` | UTC |
-| `PORTFOLIO_SNAPSHOT_CRON` | no | `0 */15 * * * *` | UTC |
-| `NOTIFICATION_RETENTION_DAYS` | no | `30` | Read notifications |
-| `TOKEN_RETENTION_DAYS` | no | `7` | Expired/revoked refresh tokens |
+| `PORT` | production | `10000` | HTTP port |
+| `PLATFORM_JOBS_ENABLED` | no | `true` | Maintenance scheduling |
+| `SMARTAPI_ENABLED` | no | `false` | Enables read-only market data |
+| `SMARTAPI_API_KEY` | with broker | empty | Never commit |
+| `SMARTAPI_CLIENT_CODE` | with broker | empty | Never commit |
+| `SMARTAPI_PIN` | with broker | empty | Never commit |
+| `SMARTAPI_TOTP_SECRET` | with broker | empty | Never commit |
+| `SMARTAPI_CLIENT_LOCAL_IP` | with broker | empty | Required login metadata |
+| `SMARTAPI_CLIENT_PUBLIC_IP` | with broker | empty | Required login metadata |
+| `SMARTAPI_MAC_ADDRESS` | with broker | empty | Required login metadata |
+| `LIVE_MARKET_INSTRUMENTS` | no | `NSE_CASH:2885,NSE_CASH:NIFTY,NSE_CASH:BANKNIFTY,NSE_FO:NIFTY` | Baseline subscriptions |
+| `LIVE_MARKET_INCLUDE_WATCHLISTS` | no | `true` | Add watchlist instruments |
+| `LIVE_MARKET_MAX_INSTRUMENTS` | no | `200` | Hard cap |
+| `LIVE_TICK_MAX_AGE` | no | `2m` | Tick freshness policy |
+| `LIVE_CANDLE_MAX_AGE` | no | `10m` | Candle freshness policy |
+| `NSE_HOLIDAYS`, `BSE_HOLIDAYS`, `MCX_HOLIDAYS` | no | empty | Comma-separated ISO dates |
 
-Broker variables (`SMARTAPI_*`) are documented in the backend README and
-`.env.example`. They are not required for Phase 12 startup.
+There is no login, JWT, refresh-token, BCrypt or administrator-bootstrap
+configuration. A fixed local principal owns watchlists, preferences and
+notifications.
 
-Production startup refuses to continue if `JWT_SECRET` is blank. A non-empty
-secret that does not decode to at least 256 bits also fails startup. Development
-profiles generate an ephemeral signing key when the variable is absent, so tokens
-are invalidated by a restart.
-
-Generate a secret without committing it:
-
-```bash
-openssl rand -base64 32
-```
-
-## 4. Build and verify locally
+## 4. Build and verify
 
 ```bash
 cd backend
 mvn -B -ntp verify
-```
-
-Expected Phase 12 result: 1,072 tests, 0 failures, 2 skipped.
-
-Build the jar:
-
-```bash
 mvn -B -ntp package
+```
+
+The executable jar is `target/trading-assistant-backend-0.1.0.jar`. The build
+also writes `META-INF/build-info.properties`, exposed through
+`/api/v1/system/info`.
+
+## 5. Run locally
+
+```bash
+export MONGODB_URI='mongodb://localhost:27017/tradingassistant'
 java -jar target/trading-assistant-backend-0.1.0.jar
 ```
 
-Run the production profile locally with a throwaway database and secret:
+Useful checks:
 
 ```bash
-MONGODB_URI='mongodb://localhost:27017/trading_assistant' \
-JWT_SECRET="$(openssl rand -base64 32)" \
-SPRING_PROFILES_ACTIVE=prod \
-PORT=10000 \
-java -jar target/trading-assistant-backend-0.1.0.jar
+curl -i http://localhost:8080/actuator/health
+curl -i http://localhost:8080/api/v1/system/status
+curl -i http://localhost:8080/api/v1/market/freshness
 ```
 
-Startup is not the same as readiness. Confirm HTTP responses:
+With the broker enabled, `/api/v1/market/freshness` is the quickest confirmation
+that ticks and candles are arriving. `UNKNOWN` or an empty list means no live
+observation has reached the process yet; it does not mean the endpoint failed.
+
+## 6. Docker
 
 ```bash
-curl -fsS http://localhost:10000/actuator/health
-curl -fsS http://localhost:10000/api/v1/system/status
-curl -fsS http://localhost:10000/v3/api-docs >/dev/null
-```
-
-`/api/v1/system/status` should report `database: UP`. `engine` is `DISABLED`
-unless the broker is configured.
-
-## 5. Docker
-
-The existing multi-stage `Dockerfile` builds with Maven and runs as a non-root
-user:
-
-```bash
-docker build -t trading-assistant-api:phase12 .
-docker run --rm -p 10000:10000 \
+docker build -t trading-assistant-backend .
+docker run --rm -p 8080:8080 \
   -e SPRING_PROFILES_ACTIVE=prod \
-  -e PORT=10000 \
-  -e MONGODB_URI='mongodb+srv://.../trading_assistant' \
-  -e JWT_SECRET="$(openssl rand -base64 32)" \
-  trading-assistant-api:phase12
+  -e MONGODB_URI='mongodb+srv://.../tradingassistant' \
+  trading-assistant-backend
 ```
 
-The HTTP port comes from `PORT`; the container exposes 10000. Do not bake secrets
-into the image. The image runs as the unprivileged `app` user.
+The image runs as an unprivileged user. Secrets belong in the platform's secret
+store, not in the image or a committed env file.
 
-## 6. Render
+## 7. Render
 
-`render.yaml` describes the web service and the non-secret defaults. Create the
-service from the repository, then set secrets in the Render dashboard.
+1. Create a web service from the backend repository.
+2. Build command: `mvn -B -ntp package -DskipTests`.
+3. Start command: `java -jar target/trading-assistant-backend-0.1.0.jar`.
+4. Add `MONGODB_URI` as a secret, including `/tradingassistant`.
+5. Add broker secrets only when live monitoring is required.
+6. Set the health check to `/actuator/health`.
 
-1. Connect the backend repository (or use the existing service).
-2. Use the Docker runtime and `./Dockerfile`.
-3. Set `SPRING_PROFILES_ACTIVE=prod`.
-4. Add `MONGODB_URI` as a secret. Include `/trading_assistant`.
-5. Add `JWT_SECRET` as a secret (`sync: false` in the blueprint).
-6. Optionally add `APP_ADMIN_EMAIL` and `APP_ADMIN_PASSWORD` as secrets.
-7. Add allowed browser origins to `CORS_ALLOWED_ORIGINS` only if a web client
-   calls the API. The Android client does not need CORS.
-8. Set the health check to `/actuator/health`.
-9. Allow Render's outbound addresses in Atlas.
-10. Deploy and verify the endpoints below on the deployed origin.
+The free Render plan spins down after inactivity and is not suitable for
+continuous WebSocket monitoring.
 
-Render free instances sleep after inactivity and are unsuitable for continuous
-market monitoring. Use a paid instance and a persistent process for the broker
-pipeline. Do not enable broker credentials on a sleeping free instance.
+## 8. Post-deploy checklist
 
-## 7. Post-deployment verification
-
-```bash
-BASE=https://<service-host>
-
-curl -fsS "$BASE/actuator/health"
-curl -fsS "$BASE/api/v1/system/status"
-curl -fsS "$BASE/actuator/info"
-curl -fsS "$BASE/v3/api-docs" >/dev/null
-```
-
-Then run a complete account flow on the deployed origin:
-
-```bash
-curl -s -X POST "$BASE/api/v1/auth/register" \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"verify@example.com","displayName":"Verify","password":"strong-password"}'
-```
-
-Verify login, an authenticated `GET /api/v1/portfolio`, a foreign-origin request
-being rejected when CORS is restricted, and sign-out. A health check returning
-200 is not evidence that authentication or MongoDB writes work.
-
-Do not use a real trading account for a smoke test on a free instance.
-
-## 8. Android client configuration
-
-The Android app compiles its API base URL from the Gradle property `apiBaseUrl`:
-
-```bash
-cd frontend
-./gradlew assembleDebug -PapiBaseUrl=https://<service-host>/
-```
-
-Default debug value: `http://10.0.2.2:8080/` (host loopback from the Android
-emulator). Cleartext HTTP is permitted only for `10.0.2.2`, `localhost` and
-`127.0.0.1`; all other hosts require HTTPS. A physical device needs a reachable
-HTTPS host or an adb reverse tunnel.
-
-Use a dedicated non-production account for Android smoke tests.
-
-## 9. Security checklist
-
-- [ ] `JWT_SECRET` is a fresh Base64 32+ byte value, stored only in the host's
-      secret store.
-- [ ] `MONGODB_URI` uses a least-privilege database user and TLS.
-- [ ] The database name is `trading_assistant`.
-- [ ] No credentials are in Git, `render.yaml`, logs or API responses.
-- [ ] `SPRING_PROFILES_ACTIVE=prod`; startup fails without a signing secret.
-- [ ] MongoDB health indicator is enabled in production.
-- [ ] CORS is restricted to required browser origins (or empty for Android-only).
-- [ ] Actuator exposes only health, info, metrics and Prometheus.
-- [ ] The bootstrap administrator password is rotated after first login.
-- [ ] Backups and Atlas alerts are configured.
-- [ ] Broker credentials, if enabled, belong to a dedicated account.
-
-## 10. Rollback and operations
-
-- Keep the previous image/jar; redeploying it is the rollback.
-- Index creation is additive and idempotent. No migration framework is used in
-  Phase 12; document any future schema change before applying it.
-- Portfolio snapshots are captured every 15 minutes while the engine is running
-  and retained independently of the process lifetime.
-- Refresh-token cleanup, notification retention and read-model trimming are
-  maintenance jobs. They do not trade.
-- If MongoDB is unavailable, affected endpoints return
-  `503 DATABASE_UNAVAILABLE`; system status reports `DEGRADED`.
-- If the broker/engine is unavailable, order routes return
-  `503 ENGINE_UNAVAILABLE`; analysis lists may be empty.
-
-## 11. Known deployment limitations
-
-- MongoDB Atlas connectivity and index initialization were verified manually
-  against the dedicated `trading_assistant` database. The automated test suite
-  still uses an in-process Mongo-compatible server.
-- No deployment was performed as part of Phase 12.
-- Android instrumented tests were compiled but not executed because no emulator
-  is installed in the development environment.
-- There is no rate limiting, MFA, email verification, password reset or key
-  rotation; treat these as production hardening items, not implemented features.
+- [ ] `/actuator/health` reports `UP`.
+- [ ] `/api/v1/system/status` reports the database as `UP`.
+- [ ] The database name in the URI is `tradingassistant`, not `boom`.
+- [ ] No secret is present in logs, source, the client or an API response.
+- [ ] If the broker is enabled, `/api/v1/market/freshness` shows observed
+      instruments and the freshness policy is appropriate for the session.
+- [ ] `NSE_HOLIDAYS`, `BSE_HOLIDAYS` and `MCX_HOLIDAYS` contain the current
+      year's dates if calendar-aware sessions are required.
+- [ ] No order, portfolio or execution endpoint is reachable.

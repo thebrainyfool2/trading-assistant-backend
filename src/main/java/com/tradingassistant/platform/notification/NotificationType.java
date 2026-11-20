@@ -10,6 +10,7 @@ public enum NotificationType {
 
     ORDER_UPDATE,
     POSITION_UPDATE,
+    TRADE_ALERT,
     LOGIN_ALERT,
     SYSTEM_MESSAGE
 }

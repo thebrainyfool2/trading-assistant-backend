@@ -3,18 +3,23 @@ package com.tradingassistant.pipeline.calendar;
 import com.tradingassistant.market.domain.Exchange;
 import com.tradingassistant.market.time.MarketStatusResolver;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Resolves the calendar for an exchange.
  *
  * <p>The default registration uses the regular session windows of the Indian
- * exchanges and no holiday list; holidays and special sessions are supplied by
- * configuration in a later phase. A different implementation can be registered
- * for any exchange without touching the pipeline.</p>
+ * exchanges and no holiday list. Phase 13 applies configured holiday dates to
+ * the weekly calendars; special sessions remain an explicit calendar operation.
+ * A different implementation can be registered for any exchange without
+ * touching the pipeline.</p>
  */
 public final class MarketCalendarRegistry {
 
@@ -69,6 +74,41 @@ public final class MarketCalendarRegistry {
         Map<Exchange, MarketCalendar> merged = new LinkedHashMap<>(calendars);
         merged.put(exchange, calendar);
         return new MarketCalendarRegistry(merged);
+    }
+
+    /**
+     * Replaces an exchange's holiday set. The calendar registry is immutable, so
+     * configuration produces a new registry rather than mutating a running one.
+     */
+    public MarketCalendarRegistry withHolidays(Exchange exchange, Set<LocalDate> holidays) {
+        MarketCalendar calendar = get(exchange);
+        if (!(calendar instanceof WeeklyMarketCalendar weekly)) {
+            throw new IllegalArgumentException(
+                    "Exchange " + exchange + " does not expose a configurable weekly calendar");
+        }
+        return withCalendar(exchange, weekly.withHolidays(holidays));
+    }
+
+    /**
+     * Parses comma-separated ISO market dates. Blank input is an empty set.
+     */
+    public static Set<LocalDate> parseHolidays(String csv) {
+        Set<LocalDate> dates = new LinkedHashSet<>();
+        if (csv == null || csv.isBlank()) {
+            return Set.of();
+        }
+        for (String entry : csv.split(",")) {
+            String value = entry.trim();
+            if (value.isEmpty()) {
+                continue;
+            }
+            try {
+                dates.add(LocalDate.parse(value));
+            } catch (DateTimeParseException failure) {
+                throw new IllegalArgumentException("Invalid market holiday date: " + value, failure);
+            }
+        }
+        return Set.copyOf(dates);
     }
 
     /**

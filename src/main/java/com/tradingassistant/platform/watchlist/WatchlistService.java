@@ -3,6 +3,7 @@ package com.tradingassistant.platform.watchlist;
 import com.tradingassistant.common.api.ErrorCode;
 import com.tradingassistant.market.domain.Segment;
 import com.tradingassistant.platform.error.PlatformException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -23,10 +24,14 @@ public class WatchlistService {
     private static final int MAXIMUM_WATCHLISTS = 25;
 
     private final WatchlistRepository repository;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    public WatchlistService(WatchlistRepository repository, Clock clock) {
+    public WatchlistService(WatchlistRepository repository,
+                            ApplicationEventPublisher events,
+                            Clock clock) {
         this.repository = repository;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -50,8 +55,10 @@ public class WatchlistService {
             throw duplicateName();
         }
         try {
-            return repository.save(WatchlistDocument.create(userId, normalised,
-                    clock.instant()));
+            WatchlistDocument created = repository.save(WatchlistDocument.create(userId,
+                    normalised, clock.instant()));
+            publish(userId);
+            return created;
         } catch (DuplicateKeyException race) {
             throw duplicateName();
         }
@@ -66,12 +73,16 @@ public class WatchlistService {
         if (repository.existsByUserIdAndName(userId, normalised)) {
             throw duplicateName();
         }
-        return repository.save(watchlist.rename(normalised, clock.instant()));
+        WatchlistDocument renamed = repository.save(watchlist.rename(normalised,
+                clock.instant()));
+        publish(userId);
+        return renamed;
     }
 
     public void delete(String userId, String watchlistId) {
         WatchlistDocument watchlist = require(userId, watchlistId);
         repository.delete(watchlist);
+        publish(userId);
     }
 
     public WatchlistDocument addItem(String userId, String watchlistId,
@@ -95,7 +106,10 @@ public class WatchlistService {
         List<WatchlistItem> items = new ArrayList<>(watchlist.items());
         items.add(new WatchlistItem(UUID.randomUUID().toString(), token, display,
                 segment, clock.instant()));
-        return repository.save(watchlist.withItems(items, clock.instant()));
+        WatchlistDocument updated = repository.save(watchlist.withItems(items,
+                clock.instant()));
+        publish(userId);
+        return updated;
     }
 
     public WatchlistDocument removeItem(String userId, String watchlistId,
@@ -108,7 +122,10 @@ public class WatchlistService {
             throw new PlatformException(ErrorCode.RESOURCE_NOT_FOUND,
                     "Watchlist item not found.");
         }
-        return repository.save(watchlist.withItems(remaining, clock.instant()));
+        WatchlistDocument updated = repository.save(watchlist.withItems(remaining,
+                clock.instant()));
+        publish(userId);
+        return updated;
     }
 
     public long count(String userId) {
@@ -130,6 +147,10 @@ public class WatchlistService {
                     field + " must not be blank.");
         }
         return value.trim();
+    }
+
+    private void publish(String userId) {
+        events.publishEvent(new WatchlistChangedEvent(userId));
     }
 
     private static PlatformException duplicateName() {

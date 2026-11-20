@@ -127,6 +127,45 @@ class AngelOneHttpClientTest {
     }
 
     @Test
+    void translatesPlainText403RateLimitResponse() {
+        server.expect(requestTo("https://apiconnect.angelone.in" + QUOTE_PATH))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body("Access denied because of exceeding access rate"));
+
+        assertThatThrownBy(() -> client.post(
+                QUOTE_PATH,
+                java.util.Map.of("mode", "LTP"),
+                QUOTE_ENVELOPE,
+                "test-jwt",
+                RetryPolicy.none()))
+                .isInstanceOf(BrokerRateLimitException.class);
+        server.verify();
+    }
+
+    @Test
+    void retriesPlainText403RateLimitWithHistoryPolicy() {
+        server.expect(requestTo("https://apiconnect.angelone.in" + QUOTE_PATH))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body("Access denied because of exceeding access rate"));
+        server.expect(requestTo("https://apiconnect.angelone.in" + QUOTE_PATH))
+                .andRespond(withSuccess("""
+                        {"status":true,"message":"SUCCESS","errorcode":"","data":{"fetched":[],"unfetched":[]}}
+                        """, MediaType.APPLICATION_JSON));
+
+        AngelOneEnvelope<QuoteResponseData> response = client.post(
+                QUOTE_PATH,
+                java.util.Map.of("mode", "LTP"),
+                QUOTE_ENVELOPE,
+                "test-jwt",
+                new RetryPolicy(1, java.time.Duration.ofMillis(1), java.time.Duration.ofMillis(1)));
+
+        assertThat(response.status()).isTrue();
+        server.verify();
+    }
+
+    @Test
     void mapsTotpRejectionFromSuccessfulHttpEnvelope() {
         server.expect(requestTo("https://apiconnect.angelone.in" + QUOTE_PATH))
                 .andRespond(withSuccess("""

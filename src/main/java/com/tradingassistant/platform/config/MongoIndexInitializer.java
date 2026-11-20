@@ -3,6 +3,8 @@ package com.tradingassistant.platform.config;
 import com.tradingassistant.platform.history.OrderRecordDocument;
 import com.tradingassistant.platform.history.PortfolioSnapshotDocument;
 import com.tradingassistant.platform.history.TradeRecordDocument;
+import com.tradingassistant.monitoring.persistence.MonitoringAlertDocument;
+import com.tradingassistant.monitoring.persistence.MonitoringHistoryDocument;
 import com.tradingassistant.platform.notification.NotificationDocument;
 import com.tradingassistant.platform.security.RefreshTokenDocument;
 import com.tradingassistant.platform.settings.ApplicationSettingsDocument;
@@ -78,6 +80,17 @@ public class MongoIndexInitializer implements ApplicationRunner {
         ensure("application_settings", () -> mongoTemplate
                 .indexOps(ApplicationSettingsDocument.class).ensureIndex(
                         new Index().on("updatedAt", Sort.Direction.DESC)));
+        ensure("manual_trades.status", () -> mongoTemplate
+                .indexOps(com.tradingassistant.monitoring.persistence.ManualTradeDocument.class)
+                .ensureIndex(new Index().on("status", Sort.Direction.ASC)
+                        .on("entryTimestamp", Sort.Direction.ASC)));
+        ensure("monitoring_history.tradeTime", () -> mongoTemplate
+                .indexOps(MonitoringHistoryDocument.class).ensureIndex(
+                        new Index().on("tradeId", Sort.Direction.ASC)
+                                .on("timestamp", Sort.Direction.DESC)));
+        ensure("monitoring_alerts.time", () -> mongoTemplate
+                .indexOps(MonitoringAlertDocument.class).ensureIndex(
+                        new Index().on("timestamp", Sort.Direction.DESC)));
     }
 
     private static void ensure(String name, Runnable action) {

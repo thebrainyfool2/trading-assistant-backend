@@ -13,7 +13,7 @@ portfolio calculations delivered in earlier phases.
 | Constraint | Result |
 |---|---|
 | Do not change Phase 1–11 architecture or calculations | Engine packages are unchanged except new app error codes. Controllers call services; services call existing engine components. |
-| Database `trading_assistant` on the existing Atlas cluster | Configured only through `MONGODB_URI`; local fallback is `mongodb://localhost:27017/trading_assistant`; `boom` is never used. |
+| Database `tradingassistant` on the existing Atlas cluster | Configured only through `MONGODB_URI`; local fallback is `mongodb://localhost:27017/tradingassistant`; `boom` is never used. |
 | No hardcoded credentials | Secrets come from environment variables; `.env.example` contains placeholders only. |
 | Persist users, watchlists, preferences, orders, trades, portfolio snapshots, settings | Done through nine MongoDB collections. |
 | Do not persist engine caches | The read model is in memory; only application records are stored. |
@@ -84,7 +84,7 @@ secret must decode to at least 256 bits.
 
 ## 4. Persistence
 
-Nine collections on the `trading_assistant` database:
+Nine collections on the `tradingassistant` database:
 
 | Collection | Purpose |
 |---|---|
@@ -270,7 +270,7 @@ same as executing them.
 
 Backend integration tests use `de.bwaldvogel:mongo-java-server`, not Atlas. A
 separate manual check connected to the Atlas cluster using the dedicated
-`trading_assistant` database, created its nine collections and let the
+`tradingassistant` database, created its nine collections and let the
 application initialize its indexes; `/api/v1/system/status` reported
 `database: UP`. The automated suite still does not exercise Atlas, and no
 broker or Render deployment was performed.

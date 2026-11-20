@@ -4,6 +4,7 @@ import com.tradingassistant.pipeline.event.MarketEventBus;
 import com.tradingassistant.pipeline.event.MarketEventListener;
 import com.tradingassistant.platform.history.ExecutionHistoryListener;
 import com.tradingassistant.platform.notification.ExecutionNotificationListener;
+import com.tradingassistant.platform.readmodel.MarketDataFreshnessService;
 import com.tradingassistant.platform.readmodel.PipelineSnapshotStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,10 +38,11 @@ public class PlatformConfiguration {
     public PlatformEventBridge platformEventBridge(
             ObjectProvider<MarketEventBus> busProvider,
             PipelineSnapshotStore snapshotStore,
+            MarketDataFreshnessService freshness,
             ExecutionHistoryListener historyListener,
             ExecutionNotificationListener notificationListener) {
         return new PlatformEventBridge(busProvider,
-                List.of(snapshotStore, historyListener, notificationListener));
+                List.of(snapshotStore, freshness, historyListener, notificationListener));
     }
 
     /**

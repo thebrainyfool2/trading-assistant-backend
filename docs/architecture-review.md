@@ -1,4 +1,12 @@
-# Architecture Review — Trading Assistant
+# Architecture Review (Historical)
+
+> **Historical document.** This review was written before the single-owner
+> correction. Its JWT, account, order, portfolio and 15-screen findings no longer
+> describe the running application. The current product is no-login, read-only
+> and has seven Android screens. See `phase-13-report.md` and the current
+> `README.md` for the implemented state.
+
+## Archived review — Trading Assistant
 
 Review date: 18 November 2026  
 Scope: Phases 1–12, backend and Android client  
@@ -571,7 +579,7 @@ Android:
 Weaknesses:
 
 - **No automated live Atlas test.** A manual check connected to the dedicated
-  `trading_assistant` database and initialized its indexes successfully, but
+  `tradingassistant` database and initialized its indexes successfully, but
   network-policy, TTL and long-run behavior are not covered by automation.
 - **No broker/live execution test** in this phase.
 - **No load, soak, concurrency or failure-injection tests.** The dual-write and

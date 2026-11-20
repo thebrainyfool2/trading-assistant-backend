@@ -99,11 +99,96 @@ app:
       retry-base-delay: ${SMARTAPI_RETRY_BASE_DELAY:250ms}
       retry-max-delay: ${SMARTAPI_RETRY_MAX_DELAY:2s}
   live:
-    # Read-only SmartAPI warm-up and stream for the prediction engine.
+    # Read-only SmartAPI warm-up and stream for the deterministic decision pipeline.
     enabled: ${LIVE_MARKET_ENABLED:true}
-    instruments: ${LIVE_MARKET_INSTRUMENTS:NSE_CASH:2885}
+    # Numeric tokens are used directly. Readable aliases are resolved from the
+    # instrument master; a failed alias is logged and skipped.
+    instruments: ${LIVE_MARKET_INSTRUMENTS:NSE_CASH:2885,NSE_CASH:NIFTY,NSE_CASH:BANKNIFTY,NSE_FO:NIFTY}
     interval: ${LIVE_MARKET_INTERVAL:FIVE_MINUTE}
     history-days: ${LIVE_MARKET_HISTORY_DAYS:10}
+    include-watchlists: ${LIVE_MARKET_INCLUDE_WATCHLISTS:true}
+    max-instruments: ${LIVE_MARKET_MAX_INSTRUMENTS:200}
+    alias-cache-ttl: ${LIVE_MARKET_ALIAS_CACHE_TTL:10m}
+    reconcile-interval-ms: ${LIVE_MARKET_RECONCILE_INTERVAL_MS:15000}
+    reconcile-initial-delay-ms: ${LIVE_MARKET_RECONCILE_INITIAL_DELAY_MS:1000}
+    freshness:
+      max-tick-age: ${LIVE_TICK_MAX_AGE:2m}
+      max-candle-age: ${LIVE_CANDLE_MAX_AGE:10m}
+    option-chain:
+      # Read-only staging for monitored cash/index underlyings. SmartAPI has no
+      # option-chain endpoint, so the nearest expiry and closest strikes are
+      # assembled from the instrument master and quote API.
+      enabled: ${LIVE_OPTION_CHAIN_ENABLED:true}
+      strikes-each-side: ${LIVE_OPTION_CHAIN_STRIKES_EACH_SIDE:10}
+      refresh-interval-ms: ${LIVE_OPTION_CHAIN_REFRESH_INTERVAL_MS:30000}
+      quote-batch-size: ${LIVE_OPTION_CHAIN_QUOTE_BATCH_SIZE:50}
+  recommendation:
+    # Deterministic combination of existing engine outputs. This never places,
+    # sizes or executes a trade.
+    enabled: ${RECOMMENDATION_ENABLED:true}
+    minimum-confidence: ${RECOMMENDATION_MIN_CONFIDENCE:55}
+    minimum-directional-edge: ${RECOMMENDATION_MIN_DIRECTIONAL_EDGE:5}
+    pcr-bullish-threshold: ${RECOMMENDATION_PCR_BULLISH:1.20}
+    pcr-bearish-threshold: ${RECOMMENDATION_PCR_BEARISH:0.80}
+    high-iv-rank: ${RECOMMENDATION_HIGH_IV_RANK:80}
+    low-iv-rank: ${RECOMMENDATION_LOW_IV_RANK:20}
+    allowed-expiry-kinds: ${RECOMMENDATION_ALLOWED_EXPIRIES:WEEKLY,MONTHLY}
+    expiry-selection: ${RECOMMENDATION_EXPIRY_SELECTION:NEAREST}
+    strike-mode: ${RECOMMENDATION_STRIKE_MODE:ATM}
+    strike-offset-steps: ${RECOMMENDATION_STRIKE_OFFSET_STEPS:0}
+    maximum-strike-steps: ${RECOMMENDATION_MAX_STRIKE_STEPS:5}
+    weights:
+      trend: ${RECOMMENDATION_WEIGHT_TREND:20}
+      momentum: ${RECOMMENDATION_WEIGHT_MOMENTUM:15}
+      volatility: ${RECOMMENDATION_WEIGHT_VOLATILITY:5}
+      liquidity: ${RECOMMENDATION_WEIGHT_LIQUIDITY:10}
+      volume: ${RECOMMENDATION_WEIGHT_VOLUME:5}
+      open_interest: ${RECOMMENDATION_WEIGHT_OPEN_INTEREST:10}
+      oi_change: ${RECOMMENDATION_WEIGHT_OI_CHANGE:5}
+      pcr: ${RECOMMENDATION_WEIGHT_PCR:5}
+      iv: ${RECOMMENDATION_WEIGHT_IV:5}
+      iv_rank: ${RECOMMENDATION_WEIGHT_IV_RANK:5}
+      greeks: ${RECOMMENDATION_WEIGHT_GREEKS:5}
+      expected_move: ${RECOMMENDATION_WEIGHT_EXPECTED_MOVE:5}
+      support_resistance: ${RECOMMENDATION_WEIGHT_SUPPORT_RESISTANCE:5}
+      breakout: ${RECOMMENDATION_WEIGHT_BREAKOUT:5}
+      market_structure: ${RECOMMENDATION_WEIGHT_MARKET_STRUCTURE:5}
+      trend_alignment: ${RECOMMENDATION_WEIGHT_TREND_ALIGNMENT:10}
+      risk_reward: ${RECOMMENDATION_WEIGHT_RISK_REWARD:15}
+      qualification: ${RECOMMENDATION_WEIGHT_QUALIFICATION:10}
+      strategy_agreement: ${RECOMMENDATION_WEIGHT_STRATEGY_AGREEMENT:5}
+      market_session: ${RECOMMENDATION_WEIGHT_MARKET_SESSION:5}
+      freshness: ${RECOMMENDATION_WEIGHT_FRESHNESS:5}
+  trade-plan:
+    # Reference entry/target/stop for an actionable recommendation. The plan
+    # uses the existing ATR stop and ATM delta; it is not an order or forecast.
+    delta-fallback: ${TRADE_PLAN_DELTA_FALLBACK:0.50}
+    fallback-target-percent: ${TRADE_PLAN_FALLBACK_TARGET_PERCENT:40}
+    fallback-stop-percent: ${TRADE_PLAN_FALLBACK_STOP_PERCENT:20}
+    premium-refresh-ms: ${TRADE_PLAN_PREMIUM_REFRESH_MS:30000}
+    premium-initial-delay-ms: ${TRADE_PLAN_PREMIUM_INITIAL_DELAY_MS:15000}
+    premium-alerts-enabled: ${TRADE_PLAN_PREMIUM_ALERTS_ENABLED:true}
+  monitoring:
+    # Continuous rescoring of manually recorded, already-executed trades. It
+    # never places, modifies, closes or sizes an order.
+    enabled: ${MONITORING_ENABLED:true}
+    warning-confidence: ${MONITORING_WARNING_CONFIDENCE:65}
+    exit-confidence: ${MONITORING_EXIT_CONFIDENCE:45}
+    confidence-deterioration: ${MONITORING_CONFIDENCE_DETERIORATION:10}
+    edge-deterioration: ${MONITORING_EDGE_DETERIORATION:8}
+    component-deterioration: ${MONITORING_COMPONENT_DETERIORATION:10}
+    warning-component-count: ${MONITORING_WARNING_COMPONENT_COUNT:1}
+    at-risk-component-count: ${MONITORING_AT_RISK_COMPONENT_COUNT:3}
+    strategy-disagreement-score: ${MONITORING_STRATEGY_DISAGREEMENT_SCORE:50}
+    maximum-stale-duration: ${MONITORING_MAXIMUM_STALE_DURATION:2m}
+    monitoring-interval: ${MONITORING_INTERVAL:EVENT_DRIVEN}
+  market:
+    calendar:
+      # ISO dates, comma separated. Leave blank until the exchange holiday list
+      # for the current year is loaded; invalid dates fail startup explicitly.
+      nse-holidays: ${NSE_HOLIDAYS:}
+      bse-holidays: ${BSE_HOLIDAYS:}
+      mcx-holidays: ${MCX_HOLIDAYS:}
 
 logging:
   pattern:

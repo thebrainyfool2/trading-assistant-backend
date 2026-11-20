@@ -141,6 +141,21 @@ class MarketCalendarTest {
     }
 
     @Test
+    void registryCanApplyConfiguredHolidaysWithoutMutatingOtherExchanges() {
+        MarketCalendarRegistry registry = MarketCalendarRegistry.defaults()
+                .withHolidays(Exchange.NSE, Set.of(WEDNESDAY));
+
+        assertThat(registry.get(Exchange.NSE).isTradingDay(WEDNESDAY)).isFalse();
+        assertThat(registry.get(Exchange.BSE).isTradingDay(WEDNESDAY)).isTrue();
+        assertThat(MarketCalendarRegistry.parseHolidays(" 2026-11-18, 2026-11-19 ,"))
+                .containsExactlyInAnyOrder(WEDNESDAY, LocalDate.of(2026, 11, 19));
+        assertThat(MarketCalendarRegistry.parseHolidays("")).isEmpty();
+        assertThatThrownBy(() -> MarketCalendarRegistry.parseHolidays("18-11-2026"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("18-11-2026");
+    }
+
+    @Test
     void aCustomCalendarCanReplaceTheDefault() {
         MarketCalendar custom = WeeklyMarketCalendar.weekday(
                 "CUSTOM", ZONE, new SessionWindow(LocalTime.of(10, 0), LocalTime.of(14, 0)));
