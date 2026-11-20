@@ -10,14 +10,18 @@ import com.tradingassistant.broker.angelone.http.AngelOneHttpClient;
 import com.tradingassistant.broker.angelone.market.AngelOneMarketDataProvider;
 import com.tradingassistant.broker.angelone.ws.AngelOneMarketFeedClient;
 import com.tradingassistant.broker.api.BrokerProvider;
+import com.tradingassistant.broker.exception.BrokerConfigurationException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.net.http.HttpClient;
 import java.time.Clock;
+import java.time.Duration;
 
 /**
  * Wires the SmartAPI adapter only when {@code SMARTAPI_ENABLED=true}. When the
@@ -30,8 +34,18 @@ import java.time.Clock;
 public class BrokerConfiguration {
 
     @Bean
-    public BrokerProvider angelOneBrokerProvider(AngelOneProperties properties, ObjectMapper objectMapper) {
+    public BrokerProvider angelOneBrokerProvider(
+            AngelOneProperties properties,
+            ObjectMapper objectMapper,
+            Environment environment) {
         properties.validate();
+        Duration instrumentMasterTimeout = Binder.get(environment)
+                .bind("app.broker.angel-one.instrument-master-timeout", Duration.class)
+                .orElse(Duration.ofMinutes(2));
+        if (instrumentMasterTimeout.isZero() || instrumentMasterTimeout.isNegative()) {
+            throw new BrokerConfigurationException(
+                    "SMARTAPI_INSTRUMENT_MASTER_TIMEOUT must be a positive duration.");
+        }
 
         Clock clock = Clock.systemUTC();
         HttpClient jdkHttpClient = HttpClient.newBuilder()
@@ -44,7 +58,21 @@ public class BrokerConfiguration {
                 .requestFactory(requestFactory)
                 .build();
 
-        AngelOneHttpClient httpClient = new AngelOneHttpClient(properties, restClient, objectMapper);
+        // The instrument master is a ~36 MB public dump. The broker read
+        // timeout is sized for API calls, so bulk downloads get their own
+        // client; sharing it truncated the download and dropped all aliases.
+        HttpClient downloadHttpClient = HttpClient.newBuilder()
+                .connectTimeout(properties.connectTimeout())
+                .build();
+        JdkClientHttpRequestFactory downloadRequestFactory =
+                new JdkClientHttpRequestFactory(downloadHttpClient);
+        downloadRequestFactory.setReadTimeout(instrumentMasterTimeout);
+        RestClient downloadClient = RestClient.builder()
+                .requestFactory(downloadRequestFactory)
+                .build();
+
+        AngelOneHttpClient httpClient = new AngelOneHttpClient(
+                properties, restClient, downloadClient, objectMapper);
         TotpCodeGenerator totpCodeGenerator = new TotpCodeGenerator(properties.totpSecret());
         JwtExpiryParser jwtExpiryParser = new JwtExpiryParser(objectMapper);
         AngelOneAuthenticator authenticator = new AngelOneAuthenticator(

@@ -94,6 +94,9 @@ app:
       mac-address: ${SMARTAPI_MAC_ADDRESS:}
       connect-timeout: ${SMARTAPI_CONNECT_TIMEOUT:5s}
       read-timeout: ${SMARTAPI_READ_TIMEOUT:20s}
+      # Bulk public downloads (the instrument master) get their own longer
+      # timeout; the API read timeout is too short for a ~36 MB file.
+      instrument-master-timeout: ${SMARTAPI_INSTRUMENT_MASTER_TIMEOUT:2m}
       session-expiry-skew: ${SMARTAPI_SESSION_EXPIRY_SKEW:60s}
       max-retries: ${SMARTAPI_MAX_RETRIES:2}
       retry-base-delay: ${SMARTAPI_RETRY_BASE_DELAY:250ms}

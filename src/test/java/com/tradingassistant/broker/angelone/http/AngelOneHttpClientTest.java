@@ -197,4 +197,38 @@ class AngelOneHttpClientTest {
                 .isInstanceOf(BrokerInvalidResponseException.class);
         server.verify();
     }
+
+    @Test
+    void retriesATruncatedBulkDownloadBeforeGivingUp() {
+        String master = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json";
+        server.expect(times(3), requestTo(master))
+                .andRespond(withSuccess("[{\"token\":\"2885\",", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.getAbsolute(
+                java.net.URI.create(master),
+                new ParameterizedTypeReference<java.util.List<java.util.Map<String, Object>>>() {
+                },
+                RetryPolicy.safe(properties)))
+                .isInstanceOf(BrokerInvalidResponseException.class);
+        server.verify();
+    }
+
+    @Test
+    void returnsTheBulkDownloadOnceItCanBeRead() {
+        String master = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json";
+        server.expect(requestTo(master))
+                .andRespond(withSuccess("{\"nope\":", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(master))
+                .andRespond(withSuccess("[{\"token\":\"26000\"}]", MediaType.APPLICATION_JSON));
+
+        java.util.List<java.util.Map<String, Object>> rows = client.getAbsolute(
+                java.net.URI.create(master),
+                new ParameterizedTypeReference<java.util.List<java.util.Map<String, Object>>>() {
+                },
+                RetryPolicy.safe(properties));
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0)).containsEntry("token", "26000");
+        server.verify();
+    }
 }

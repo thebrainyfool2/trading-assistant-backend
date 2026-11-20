@@ -41,11 +41,26 @@ public class AngelOneHttpClient {
 
     private final AngelOneProperties properties;
     private final RestClient restClient;
+    private final RestClient downloadClient;
     private final ObjectMapper objectMapper;
 
     public AngelOneHttpClient(AngelOneProperties properties, RestClient restClient, ObjectMapper objectMapper) {
+        this(properties, restClient, restClient, objectMapper);
+    }
+
+    /**
+     * The download client is used for public bulk files such as the instrument
+     * master. It shares the broker transport but uses a longer read timeout,
+     * because a slow link cannot deliver tens of megabytes within the timeout
+     * that is appropriate for a quote or an order-status call.
+     */
+    public AngelOneHttpClient(AngelOneProperties properties,
+                              RestClient restClient,
+                              RestClient downloadClient,
+                              ObjectMapper objectMapper) {
         this.properties = properties;
         this.restClient = restClient;
+        this.downloadClient = downloadClient == null ? restClient : downloadClient;
         this.objectMapper = objectMapper;
     }
 
@@ -79,7 +94,7 @@ public class AngelOneHttpClient {
     public <T> T getAbsolute(URI uri,
                              ParameterizedTypeReference<T> responseType,
                              RetryPolicy retryPolicy) {
-        return execute("GET", uri.getPath(), retryPolicy, () -> restClient.get()
+        return execute("GET", uri.getPath(), retryPolicy, () -> downloadClient.get()
                 .uri(uri)
                 .accept(MediaType.APPLICATION_JSON)
                 .headers(this::applyHeaders)
@@ -128,8 +143,17 @@ public class AngelOneHttpClient {
                         requestId, method, path);
                 throw new BrokerUnavailableException("The broker could not be reached.", exception);
             } catch (RestClientException exception) {
-                log.warn("broker_http_invalid_response requestId={} method={} path={}",
-                        requestId, method, path);
+                if (retryPolicy.allowsRetry(attempt)) {
+                    Duration delay = retryPolicy.delay(attempt);
+                    log.warn("broker_http_invalid_response_retry requestId={} method={} path={} attempt={} delayMs={} cause={}",
+                            requestId, method, path, attempt + 1, delay.toMillis(),
+                            exception.getClass().getSimpleName());
+                    sleep(delay);
+                    attempt++;
+                    continue;
+                }
+                log.warn("broker_http_invalid_response requestId={} method={} path={} cause={}",
+                        requestId, method, path, exception.getClass().getSimpleName());
                 throw new BrokerInvalidResponseException("The broker response could not be read.", exception);
             }
         }
